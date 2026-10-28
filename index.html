@@ -71,6 +71,28 @@
   .tag { font-size: 11px; color: var(--muted); }
   footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
   .hide { display: none; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .cols > .card { min-width: 0; }
+  @media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+  .hl { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .hl h3 { font-size: 12px; font-weight: 600; color: var(--text-2); margin: 0 0 6px; }
+  .hl ol { margin: 0; padding: 0; list-style: none; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .hl li { padding: 3px 0; border-bottom: 1px solid var(--grid); display: flex; justify-content: space-between; gap: 10px; }
+  .hl li span:last-child { color: var(--text-2); white-space: nowrap; }
+  .ticker { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; margin-bottom: 16px; font-size: 13px; }
+  .tk-label { font-weight: 600; white-space: nowrap; }
+  .tk-label::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--series); margin-right: 7px; }
+  .tk-view { flex: 1; overflow: hidden; min-width: 0; white-space: nowrap; }
+  .tk-track { display: inline-block; white-space: nowrap; animation: tk var(--tk-dur, 40s) linear infinite; }
+  .tk-view:hover .tk-track { animation-play-state: paused; }
+  .tk-item { display: inline-block; margin-right: 40px; color: var(--text-2); }
+  .tk-item b { color: var(--text); font-weight: 600; }
+  @keyframes tk { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) { .tk-track { animation: none; } .tk-view { overflow-x: auto; } }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 3px 10px; font-size: 12px; background: transparent; }
+  .seg button.on { background: var(--chip); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -87,7 +109,19 @@
 
   <div id="banners"></div>
 
-  <section class="card" id="loader">
+  <div class="ticker hide" id="tickerWrap">
+    <span class="tk-label">Just sold</span>
+    <div class="tk-view" id="tkView" role="marquee" aria-label="Most recently sold lots"><div class="tk-track" id="tkTrack"></div></div>
+    <span class="seg" role="group" aria-label="Ticker scope"><button type="button" data-scope="mine" class="on">My lots</button><button type="button" data-scope="all">All lots</button></span>
+  </div>
+
+  <section class="card" id="setup">
+  <div class="bar hide" id="setupBar">
+    <span id="setupSum"></span>
+    <button id="setupEdit" type="button">Change lots or settings</button>
+  </div>
+  <div id="setupBody">
+  <div id="loader">
     <h2>1. Load your lots</h2>
     <div class="grid2">
       <div>
@@ -106,9 +140,9 @@
       </div>
     </div>
     <p class="note" id="loadMsg" style="margin:10px 0 0"></p>
-  </section>
+  </div>
 
-  <section class="card" id="settings">
+  <div id="settings" style="margin-top:18px">
     <h2>2. Price basis</h2>
     <label class="note">Final prices on SAN are
       <select id="basis">
@@ -118,10 +152,30 @@
     </label>
     <span id="premBox" class="hide"><input type="number" id="prem" value="20" min="0" max="60" step="0.5" style="width:80px"> %</span>
     <p class="note" style="margin:8px 0 0">SAN does not say whether the posted price includes the buyer's premium. Until you confirm it with the auction firm, results are shown as posted.</p>
+  </div>
+  <div class="tools" style="margin:14px 0 0"><button type="button" id="setupDone" class="primary hide">Done</button></div>
+  </div>
   </section>
 
   <div id="dash" class="hide">
     <div class="kpis" id="kpis"></div>
+
+    <section class="card">
+      <h2>Where is the auction?</h2>
+      <p class="note" id="progNote" style="margin:0 0 6px"></p>
+      <div id="prog"></div>
+      <div class="legend" style="margin:4px 0 0">
+        <span><span class="sw solid" style="border-radius:50%"></span>Your lot, sold</span>
+        <span><span class="sw hollow" style="border-radius:50%"></span>Your lot, upcoming or open</span>
+        <span>&times; Unsold</span>
+        <span>Shaded = already sold sale-wide</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Highlights</h2>
+      <div class="hl" id="hl"></div>
+    </section>
 
     <section class="card">
       <h2 id="chartTitle">Price as % of value, by lot</h2>
@@ -132,6 +186,22 @@
       </div>
       <div id="chart"></div>
     </section>
+
+    <div class="cols">
+      <section class="card">
+        <h2>Running total: final prices vs catalog value</h2>
+        <div class="legend">
+          <span><span class="sw solid"></span>Final prices, added up</span>
+          <span><span class="sw" style="border-top:2px dashed var(--muted);height:0;border-radius:0;vertical-align:3px"></span>Catalog value of the same lots</span>
+        </div>
+        <div id="run"></div>
+      </section>
+      <section class="card">
+        <h2>Sold price vs value, by section</h2>
+        <div class="legend"><span>Dashed line = 100% of catalog value</span></div>
+        <div id="sec"></div>
+      </section>
+    </div>
 
     <section class="card">
       <div class="tools">
@@ -251,7 +321,11 @@
         catMismatch: m.low != null && c.low != null && (c.low !== m.low || (c.high || null) !== (m.high || null)),
         inCatalog: !!c.desc };
       if (res && res.amount != null) {
-        row.state = "sold"; row.final = res.amount / p; row.resCur = res.cur || "";
+        row.state = "sold"; row.final = res.amount / p; row.resCur = res.cur || ""; row.src = "results page";
+        if (c.sold != null && c.sold !== res.amount) row.srcNote = "Catalog says sold for " + c.sold + " but the results page says " + res.amount;
+      } else if (c.sold != null) {
+        /* the catalog page itself shows "SOLD for ..." once a lot closes: use it when the results page has no entry yet */
+        row.state = "sold"; row.final = c.sold / p; row.resCur = c.cur || ""; row.src = "catalog page";
       } else if ((res && res.status) || unsold[m.lot]) row.state = "unsold";
       else row.state = c.bid != null ? "open" : "nodata";
       var amt = row.state === "sold" ? row.final : (row.state === "open" ? row.bid : null);
@@ -394,7 +468,7 @@
         '<td class="desc" title="' + esc(r.desc) + '">' + esc((r.desc || "").slice(0, 110)) + (r.basisNote ? ' <span class="tag" title="' + esc(r.basisNote) + '">ⓘ basis noted</span>' : "") + (r.catMismatch ? ' <span title="Your file and the live catalog disagree on the value">⚠</span>' : "") + "</td>" +
         '<td class="num">' + vtxt + "</td>" +
         '<td class="num">' + (r.bid != null ? money(r.bid, r.cur) : "–") + (r.moved ? ' <span class="tag" title="Bid has changed since tracking began">↑moved</span>' : "") + "</td>" +
-        '<td class="num">' + (r.state === "sold" ? money(r.final, r.resCur || r.cur) : "–") + "</td>" +
+        '<td class="num">' + (r.state === "sold" ? money(r.final, r.resCur || r.cur) + (r.srcNote ? ' <span title="' + esc(r.srcNote) + '">⚠</span>' : "") : "–") + "</td>" +
         '<td class="num">' + pct(r.ratio) + "</td>" +
         '<td><span class="chip">' + esc(r.verdict) + "</span></td></tr>";
     });
