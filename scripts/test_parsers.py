@@ -19,6 +19,8 @@ CATALOG = """
  <td>Cat. US$6,000 SE<br><b>Currently...$300.00</b><br>Will close during Public Auction</td></tr>
 <tr><td>511</td><td>x</td><td>NEWFOUNDLAND complete sheet of 40</td><td>Cat. Val. 11280.00 Currently C$ 2,300</td></tr>
 <tr><td>600</td><td>x</td><td>No bid yet lot</td><td>Cat. US$100</td></tr>
+<tr><td>2</td><td>x</td><td>Collection lot</td><td>SOLD for C$800.00 Will close during Public Auction</td></tr>
+<tr><td>3</td><td>x</td><td>Face value lot</td><td>Cat. Val. 1600.00 SOLD for C$1,200.00 Will close during Public Auction</td></tr>
 <tr><td>1433</td><td>x</td><td>40,\n42 F-VF odd\n lot</td><td>Pounds 778 SE Currently...$110.00 Will close during Public Auction</td></tr>
 </table>
 """
@@ -52,7 +54,10 @@ check.failed = False
 
 sec, lots = f.parse_catalog_page(CATALOG, 13)
 check("section heading", sec == "US 19th & 20th Century Stamps")
-check("6 lots parsed", set(lots) == {"241", "244", "243", "511", "600", "1433"})
+check("8 lots parsed", set(lots) == {"241", "244", "243", "511", "600", "1433", "2", "3"})
+check("closed lot: 'SOLD for' read as a price, not a note", lots["2"]["sold"] == 800 and lots["2"]["cur"] == "C$" and "val_note" not in lots["2"] and "low" not in lots["2"])
+check("closed lot with catalog value keeps both", lots["3"]["low"] == 1600 and lots["3"]["sold"] == 1200)
+check("open lot has no sold price", "sold" not in lots["241"])
 check("odd value wording kept as a note, not a number", "low" not in lots["1433"] and lots["1433"]["val_note"].startswith("Pounds 778") and lots["1433"]["bid"] == 110)
 check("line breaks in description collapsed", lots["1433"]["desc"] == "40, 42 F-VF odd lot")
 check("CV lot", lots["241"]["kind"] == "CV" and lots["241"]["low"] == 565 and lots["241"]["bid"] == 90)
@@ -79,6 +84,16 @@ rl = f.catalog_page_links('<A HREF="rm59219.cfm">a</A> <a href="RM592.cfm">b</a>
 check("Maresch-style links", [n for n, _ in rl] == [19])
 
 check("unsold lot numbers", f.parse_unsold("<p>Lot 88 something</p><table><tr><td>90</td><td>x</td></tr></table>") == ["88", "90"])
+
+import datetime as _dt
+_t1 = _dt.datetime(2026, 11, 10, 15, 0, tzinfo=_dt.timezone.utc)
+_t2 = _t1 + _dt.timedelta(minutes=20)
+_o = {"results": {"1": {"amount": 800.0}, "2": {"status": "unsold"}}, "lots": {"3": {"sold": 120.0}, "4": {"bid": 5.0}}}
+f.stamp_sold_seen(_o, _t1)
+check("first-seen stamps: results + catalog sold only", set(_o["sold_seen"]) == {"1", "3"})
+_o["results"]["5"] = {"amount": 9.0}
+f.stamp_sold_seen(_o, _t2)
+check("first-seen stamp is never overwritten", _o["sold_seen"]["1"] == "2026-11-10T15:00:00Z" and _o["sold_seen"]["5"] == "2026-11-10T15:20:00Z")
 
 if check.failed:
     sys.exit(1)

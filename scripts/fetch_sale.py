@@ -44,6 +44,7 @@ CV_RE = re.compile(
     re.I,
 )
 BID_RE = re.compile(rf"Currently\.*\s*({CUR})?\s*({AMT})", re.I)
+SOLD_RE = re.compile(rf"SOLD\s+for\s*({CUR})?\s*({AMT})", re.I)
 RESULT_AMT_RE = re.compile(rf"^({CUR})?\s*({AMT})$", re.I)
 LOT_RE = re.compile(r"^\d+[A-Za-z]?$")
 STATUS_WORDS = re.compile(r"^(unsold|passed|pass|withdrawn|no sale|not sold)$", re.I)
@@ -101,12 +102,20 @@ def parse_catalog_page(html: str, page_no: int):
         if m:
             kind = "CV" if m.group(1).lower().startswith("cat") else "EST"
             rec.update(kind=kind, cur=norm_cur(m.group(2)), low=num(m.group(3)), high=num(m.group(4)))
+        # Closed lots read e.g. "SOLD for C$800.00 Will close during Public Auction" (seen on live SAN).
+        sd = SOLD_RE.search(cell)
+        if sd:
+            rec["sold"] = num(sd.group(2))
+            if not rec.get("cur"):
+                rec["cur"] = norm_cur(sd.group(1))
         if not m:
             # Unusual value wording, e.g. "Pounds 778 SE Currently...$110.00". Keep the text but
             # do NOT turn it into a number: it may be in a different currency than the bids.
-            pre = re.split(r"Currently", cell, flags=re.I)[0].strip()
-            if pre:
-                rec["val_note"] = pre
+            rest = SOLD_RE.sub(" ", BID_RE.sub(" ", cell))
+            rest = re.sub(r"Will close during Public Auction|Closing|Closed", " ", rest, flags=re.I)
+            rest = re.sub(r"\s+", " ", rest).strip()
+            if rest:
+                rec["val_note"] = rest
         b = BID_RE.search(cell)
         if b:
             rec["bid"] = num(b.group(2))
@@ -322,11 +331,28 @@ def run_sale(cfg, force=False, debug=False):
     else:
         print(f"[{key}] catalog not due (every {every} min)")
 
+    out["sold_seen"] = prev.get("sold_seen", {})
+    stamp_sold_seen(out, t)
     meta["fetched_at"] = iso(t)
     meta["lot_count"] = len(out["lots"])
     meta["result_count"] = len(out["results"])
     write(path, out)
     return ok
+
+
+def stamp_sold_seen(out, t):
+    """Remember when each lot was FIRST seen as sold (results page or catalog 'SOLD for').
+
+    Used by the dashboard's 'Just sold' ticker and its pace estimate. The resolution is the
+    job's schedule (about 15-20 minutes), not the exact second the hammer fell.
+    """
+    seen = out.setdefault("sold_seen", {})
+    for lot, r in out.get("results", {}).items():
+        if r.get("amount") is not None:
+            seen.setdefault(lot, iso(t))
+    for lot, rec in out.get("lots", {}).items():
+        if rec.get("sold") is not None:
+            seen.setdefault(lot, iso(t))
 
 
 def write(path: Path, obj):
