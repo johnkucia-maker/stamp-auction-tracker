@@ -1,0 +1,52 @@
+name: Update sale data
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Run now even outside the tracking window (use this for the first test)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install libraries
+        run: pip install requests==2.32.3 beautifulsoup4==4.12.3
+
+      - name: Self-test the parsers
+        run: python scripts/test_parsers.py
+
+      - name: Fetch SAN data
+        run: python scripts/fetch_sale.py ${{ github.event.inputs.force == 'true' && '--force' || '' }}
+
+      - name: Save data back to the repo
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then
+            echo "No changes to save."
+          else
+            git commit -m "Update sale data"
+            git pull --rebase
+            git push
+          fi
