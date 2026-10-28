@@ -247,7 +247,7 @@
       var res = d && d.results && d.results[m.lot];
       var hist = (d && d.history && d.history[m.lot]) || [];
       var row = { lot: m.lot, desc: c.desc || m.desc || "", kind: kind, low: low, high: high, ref: ref, basisNote: m.basisNote || "",
-        cur: c.cur || "", page: c.page, bid: c.bid, moved: hist.length > 1, hist: hist,
+        cur: c.cur || "", valNote: c.val_note || "", page: c.page, bid: c.bid, moved: hist.length > 1, hist: hist,
         catMismatch: m.low != null && c.low != null && (c.low !== m.low || (c.high || null) !== (m.high || null)),
         inCatalog: !!c.desc };
       if (res && res.amount != null) {
@@ -264,7 +264,8 @@
     if (r.state === "unsold") return "Unsold";
     if (r.state === "nodata") return "Not in catalog data";
     if (r.state === "open") return "Open, no result yet";
-    if (r.high) return r.final < r.low ? "▼ Under estimate" : (r.final > r.high ? "▲ Over estimate" : "● Within estimate");
+    if (r.ref == null) return "Sold (no value to compare)";
+    if (r.high)return r.final < r.low ? "▼ Under estimate" : (r.final > r.high ? "▲ Over estimate" : "● Within estimate");
     if (r.ratio >= 1) return "▲ At or over CV";
     return r.ratio >= 0.5 ? "▼ Under CV" : "▼▼ Well under CV";
   }
@@ -299,18 +300,22 @@
 
   function kpis(rows) {
     var sold = rows.filter(function (r) { return r.state === "sold"; });
-    var sv = sold.reduce(function (a, r) { return a + (r.ref || 0); }, 0), sf = sold.reduce(function (a, r) { return a + r.final; }, 0);
+    var sf = sold.reduce(function (a, r) { return a + r.final; }, 0);
+    var soldRef = sold.filter(function (r) { return r.ref != null; });  /* like with like: only lots that have a value */
+    var sv = soldRef.reduce(function (a, r) { return a + r.ref; }, 0), sfr = soldRef.reduce(function (a, r) { return a + r.final; }, 0);
     var tv = rows.reduce(function (a, r) { return a + (r.ref || 0); }, 0);
     var unsold = rows.filter(function (r) { return r.state === "unsold"; }).length;
     var open = rows.filter(function (r) { return r.state === "open"; });
     var moved = open.filter(function (r) { return r.moved; }).length;
     var cur = (rows.filter(function (r) { return r.cur; })[0] || {}).cur || "";
+    var curF = sold.length ? (sold[0].resCur || sold[0].cur || cur) : cur;
+    var nref = rows.filter(function (r) { return r.ref != null; }).length;
     var items = [
       [rows.length, "lots tracked"],
-      [money(tv, cur), "total catalog value"],
+      [nref ? money(tv, cur) : "–", nref && nref < rows.length ? "catalog value (" + nref + " lots with a value)" : "total catalog value"],
       [sold.length + " / " + rows.length, "sold"],
-      [sold.length ? money(sf, cur) : "–", "final prices (sold lots)"],
-      [sold.length && sv ? pct(sf / sv) : "–", "of value, sold lots"],
+      [sold.length ? money(sf, curF) : "–", "final prices (sold lots)"],
+      [soldRef.length && sv ? pct(sfr / sv) : "–", "of value, sold lots" + (soldRef.length && soldRef.length < sold.length ? " (" + soldRef.length + " with a value)" : "")],
       [unsold, "unsold"],
       [open.length ? moved + " / " + open.length : "–", "open lots with a moved bid"]
     ];
@@ -384,7 +389,7 @@
     }).join("") + "</tr></thead><tbody>";
     list.forEach(function (r) {
       var link = r.page && meta.firm ? BASE + "/" + meta.firm + "/" + meta.firm.toLowerCase() + meta.sale + r.page + ".cfm#Lot" + encodeURIComponent(r.lot) : "";
-      var vtxt = r.ref == null ? "–" : (r.high ? money(r.low, r.cur) + "–" + money(r.high) + ' <span class="tag">' + (r.kind === "EST" ? "est" : "apx CV") + "</span>" : money(r.low, r.cur) + ' <span class="tag">CV</span>');
+      var vtxt = r.ref == null ? (r.valNote ? '<span class="tag" title="Catalog value is in other terms; no percentage shown">' + esc(r.valNote) + "</span>" : "–") : (r.high ? money(r.low, r.cur) + "–" + money(r.high) + ' <span class="tag">' + (r.kind === "EST" ? "est" : "apx CV") + "</span>" : money(r.low, r.cur) + ' <span class="tag">CV</span>');
       h += "<tr><td>" + (link ? '<a href="' + esc(link) + '" target="_blank" rel="noopener">' + esc(r.lot) + "</a>" : esc(r.lot)) + "</td>" +
         '<td class="desc" title="' + esc(r.desc) + '">' + esc((r.desc || "").slice(0, 110)) + (r.basisNote ? ' <span class="tag" title="' + esc(r.basisNote) + '">ⓘ basis noted</span>' : "") + (r.catMismatch ? ' <span title="Your file and the live catalog disagree on the value">⚠</span>' : "") + "</td>" +
         '<td class="num">' + vtxt + "</td>" +
