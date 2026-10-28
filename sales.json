@@ -1,0 +1,29 @@
+{
+  "_help": "One entry per auction to track. 'firm' and 'sale' come from the sale page address, e.g. stampauctionnetwork.com/TS/TS367.cfm -> firm TS, sale 367. Times are UTC (US Eastern is UTC-4 until Nov 1 2026, then UTC-5).",
+  "sales": [
+    {
+      "key": "TS-367",
+      "label": "Dutch Country Auctions #367 (Nov 10-12, 2026)",
+      "firm": "TS",
+      "sale": "367",
+      "sale_url": "https://stampauctionnetwork.com/TS/TS367.cfm",
+      "track_from": "2026-10-28T00:00:00Z",
+      "results_from": "2026-11-10T14:30:00Z",
+      "track_until": "2026-11-14T00:00:00Z",
+      "catalog_refresh_minutes": 60,
+      "catalog_refresh_minutes_live": 20
+    },
+    {
+      "key": "RM-592",
+      "label": "TEST: R. Maresch & Son #592 (Oct 28-29, 2026, Canadian $)",
+      "firm": "RM",
+      "sale": "592",
+      "sale_url": "https://stampauctionnetwork.com/RM/RM592.cfm",
+      "track_from": "2026-10-28T00:00:00Z",
+      "results_from": "2026-10-28T14:00:00Z",
+      "track_until": "2026-10-31T00:00:00Z",
+      "catalog_refresh_minutes": 60,
+      "catalog_refresh_minutes_live": 30
+    }
+  ]
+}

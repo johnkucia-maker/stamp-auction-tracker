@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Auction Lot Tracker</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f6f5f2; --surface: #fcfcfb; --line: #e3e1dc; --grid: #ecebe7;
+    --text: #0b0b0b; --text-2: #52514e; --muted: #7a7872;
+    --series: #2a78d6; --chip: #eceae5; --warn-bg: #fff6e0; --warn-line: #e5c56a;
+    --focus: #2a78d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --bg: #121211; --surface: #1a1a19; --line: #33322f; --grid: #2a2a28;
+      --text: #f0efec; --text-2: #c3c2b7; --muted: #99978f;
+      --series: #3987e5; --chip: #2a2a28; --warn-bg: #2b2410; --warn-line: #7a6320;
+      --focus: #3987e5;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+  h2 { font-size: 15px; margin: 0 0 10px; }
+  .sub { color: var(--text-2); margin: 2px 0 0; font-size: 13px; }
+  header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; justify-content: space-between; margin-bottom: 20px; }
+  header > label { flex: 1 1 260px; min-width: 0; max-width: 100%; }
+  header select { width: 100%; max-width: 100%; }
+  select, input, textarea, button { font: inherit; color: inherit; }
+  select, input[type=text], input[type=number], textarea { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+  textarea { width: 100%; min-height: 86px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+  button { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--series); border-color: var(--series); color: #fff; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+  .drop { border: 2px dashed var(--line); border-radius: 10px; padding: 22px 12px; text-align: center; color: var(--text-2); cursor: pointer; }
+  .drop.over { border-color: var(--series); color: var(--text); }
+  .note { font-size: 13px; color: var(--text-2); }
+  .banner { background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; font-size: 14px; }
+  .banner b { font-weight: 600; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .kpi .v { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .kpi .l { font-size: 12px; color: var(--text-2); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--text-2); margin-bottom: 6px; }
+  .sw { display: inline-block; width: 12px; height: 12px; vertical-align: -1px; margin-right: 6px; border-radius: 2px; }
+  .sw.solid { background: var(--series); }
+  .sw.hollow { border: 2px solid var(--series); }
+  svg text { fill: var(--text-2); font-size: 11px; }
+  #tip { position: fixed; pointer-events: none; background: var(--text); color: var(--bg); padding: 6px 9px; border-radius: 6px; font-size: 12px; max-width: 280px; display: none; z-index: 10; }
+  .tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .tools .sp { flex: 1; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; color: var(--text-2); font-weight: 600; white-space: nowrap; cursor: pointer; user-select: none; }
+  th[aria-sort=ascending]::after { content: " \25B2"; font-size: 9px; }
+  th[aria-sort=descending]::after { content: " \25BC"; font-size: 9px; }
+  td.num, th.num { text-align: right; }
+  td.desc { max-width: 380px; color: var(--text-2); }
+  .chip { display: inline-block; background: var(--chip); border-radius: 999px; padding: 1px 9px; font-size: 12px; white-space: nowrap; }
+  a { color: var(--series); }
+  .tag { font-size: 11px; color: var(--muted); }
+  footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
+  .hide { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Auction Lot Tracker</h1>
+      <p class="sub" id="freshness">Loading…</p>
+    </div>
+    <label class="note">Sale
+      <select id="saleSel" aria-label="Sale"></select>
+    </label>
+  </header>
+
+  <div id="banners"></div>
+
+  <section class="card" id="loader">
+    <h2>1. Load your lots</h2>
+    <div class="grid2">
+      <div>
+        <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose lotting summary PDF">
+          Drop your lotting summary <b>PDF</b> here, or click to choose it.
+          <input type="file" id="file" accept="application/pdf" class="hide">
+        </div>
+        <p class="note">Your PDF is read <b>inside your browser</b> and is never uploaded. Only lot numbers and values are kept, and only on this device.</p>
+      </div>
+      <div>
+        <textarea id="paste" placeholder="Or paste lot numbers, e.g.&#10;241, 244, 246&#10;&#10;or lines with values, e.g.&#10;241 565 CV&#10;244 200-300 EST"></textarea>
+        <div class="tools" style="margin:8px 0 0">
+          <button id="usePaste" class="primary">Use pasted lots</button>
+          <button id="forget">Forget my lots</button>
+        </div>
+      </div>
+    </div>
+    <p class="note" id="loadMsg" style="margin:10px 0 0"></p>
+  </section>
+
+  <section class="card" id="settings">
+    <h2>2. Price basis</h2>
+    <label class="note">Final prices on SAN are
+      <select id="basis">
+        <option value="posted">used as posted (treat as hammer price)</option>
+        <option value="premium">posted prices include buyer's premium of</option>
+      </select>
+    </label>
+    <span id="premBox" class="hide"><input type="number" id="prem" value="20" min="0" max="60" step="0.5" style="width:80px"> %</span>
+    <p class="note" style="margin:8px 0 0">SAN does not say whether the posted price includes the buyer's premium. Until you confirm it with the auction firm, results are shown as posted.</p>
+  </section>
+
+  <div id="dash" class="hide">
+    <div class="kpis" id="kpis"></div>
+
+    <section class="card">
+      <h2 id="chartTitle">Price as % of value, by lot</h2>
+      <div class="legend">
+        <span><span class="sw solid"></span>Sold (final price)</span>
+        <span><span class="sw hollow"></span>Open (current bid)</span>
+        <span>Dashed line = 100% of catalog value (midpoint of an estimate range)</span>
+      </div>
+      <div id="chart"></div>
+    </section>
+
+    <section class="card">
+      <div class="tools">
+        <h2 style="margin:0">Lots</h2>
+        <select id="filter" aria-label="Filter">
+          <option value="all">All</option><option value="sold">Sold</option><option value="open">Open (bidding)</option>
+          <option value="unsold">Unsold</option><option value="moved">Bid has moved</option><option value="await">Not in catalog data</option>
+        </select>
+        <input type="text" id="search" placeholder="Search lot or text" aria-label="Search">
+        <span class="sp"></span>
+        <button id="csv">Download CSV</button>
+      </div>
+      <div class="scroll"><table id="tbl"></table></div>
+    </section>
+  </div>
+
+  <footer id="foot"></footer>
+</div>
+<div id="tip" role="tooltip"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="parser.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var BASE = "https://stampauctionnetwork.com";
+  var state = { sales: [], key: null, data: null, mine: [], sort: { k: "lot", dir: 1 } };
+
+  /* ---------- small helpers ---------- */
+  function store(op, k, v) { try { if (op === "get") return localStorage.getItem(k); if (op === "set") localStorage.setItem(k, v); if (op === "del") localStorage.removeItem(k); } catch (e) {} return null; }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function money(n, cur) { if (n == null || isNaN(n)) return "–"; return (cur || "") + Math.round(n).toLocaleString(); }
+  function pct(r) { return r == null ? "–" : Math.round(r * 100) + "%"; }
+  function ago(iso) {
+    if (!iso) return "never";
+    var m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (m < 1) return "just now"; if (m < 60) return m + " min ago";
+    var h = Math.round(m / 60); if (h < 48) return h + " h ago";
+    return Math.round(h / 24) + " days ago";
+  }
+  function curCode(c) { return { "US$": "USD", "C$": "CAD", "A$": "AUD", "NZ$": "NZD", "£": "GBP", "€": "EUR" }[c] || ""; }
+
+  /* ---------- load sales + data ---------- */
+  function fetchJson(url) { return fetch(url + (url.indexOf("?") < 0 ? "?" : "&") + "t=" + Date.now()).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }); }
+
+  fetchJson("sales.json").then(function (cfg) {
+    state.sales = cfg.sales;
+    var sel = $("saleSel");
+    cfg.sales.forEach(function (s) { var o = document.createElement("option"); o.value = s.key; o.textContent = s.label; sel.appendChild(o); });
+    var want = (location.hash || "").replace("#", "") || store("get", "sale") || cfg.sales[0].key;
+    state.key = cfg.sales.some(function (s) { return s.key === want; }) ? want : cfg.sales[0].key;
+    sel.value = state.key;
+    loadSale();
+  }).catch(function () {
+    $("freshness").textContent = "Could not load sales.json. Open this page from its web address (GitHub Pages), not by double-clicking the file.";
+  });
+
+  $("saleSel").addEventListener("change", function () { state.key = this.value; store("set", "sale", state.key); location.hash = state.key; loadSale(); });
+
+  function loadSale() {
+    state.data = null; state.mine = [];
+    var saved = store("get", "lots:" + state.key);
+    if (saved) { try { state.mine = JSON.parse(saved); setMsg("Loaded " + state.mine.length + " lots saved on this device."); } catch (e) {} }
+    else setMsg("");
+    fetchJson("data/" + state.key + ".json").then(function (d) { state.data = d; render(); })
+      .catch(function () { state.data = null; render(); });
+  }
+
+  /* ---------- loading the user's lots ---------- */
+  function setMsg(t) { $("loadMsg").textContent = t; }
+  function accept(res, src) {
+    if (!res.lots.length) { setMsg("No lots were found in " + src + ". Try pasting lot numbers instead."); return; }
+    state.mine = res.lots;
+    store("set", "lots:" + state.key, JSON.stringify(res.lots));
+    setMsg("Read " + res.lots.length + " lots from " + src + "." + (res.warnings.length ? " Note: " + res.warnings.join(" ") : ""));
+    render();
+  }
+  function readPdf(file) {
+    if (!window.pdfjsLib) { setMsg("The PDF reader could not load (are you offline?). Paste lot numbers instead."); return; }
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    setMsg("Reading PDF…");
+    file.arrayBuffer().then(function (buf) { return pdfjsLib.getDocument({ data: buf }).promise; }).then(function (doc) {
+      var all = [], p = Promise.resolve();
+      for (var i = 1; i <= doc.numPages; i++) (function (n) {
+        p = p.then(function () { return doc.getPage(n); }).then(function (pg) { return pg.getTextContent(); })
+          .then(function (tc) { all = all.concat(StampParser.linesFromItems(tc.items)); });
+      })(i);
+      return p.then(function () { return all; });
+    }).then(function (lines) { accept(StampParser.parseLines(lines), "the PDF"); })
+      .catch(function () { setMsg("That PDF could not be read. Paste lot numbers instead."); });
+  }
+  var drop = $("drop"), fileIn = $("file");
+  drop.addEventListener("click", function () { fileIn.click(); });
+  drop.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileIn.click(); } });
+  fileIn.addEventListener("change", function () { if (fileIn.files[0]) readPdf(fileIn.files[0]); });
+  ["dragenter", "dragover"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("over"); }); });
+  ["dragleave", "drop"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("over"); }); });
+  drop.addEventListener("drop", function (e) { var f = e.dataTransfer.files[0]; if (f) readPdf(f); });
+  $("usePaste").addEventListener("click", function () { accept(StampParser.parseText($("paste").value), "your pasted text"); });
+  $("forget").addEventListener("click", function () { store("del", "lots:" + state.key); state.mine = []; setMsg("Forgotten. Nothing is stored on this device."); render(); });
+  $("basis").addEventListener("change", function () { $("premBox").classList.toggle("hide", this.value !== "premium"); render(); });
+  $("prem").addEventListener("input", render);
+
+  /* ---------- model ---------- */
+  function buildRows() {
+    var d = state.data, p = $("basis").value === "premium" ? 1 + (Number($("prem").value) || 0) / 100 : 1;
+    var unsold = {}; ((d && d.unsold) || []).forEach(function (l) { unsold[l] = true; });
+    return state.mine.map(function (m) {
+      var c = (d && d.lots && d.lots[m.lot]) || {};
+      var low = m.low != null ? m.low : c.low, high = m.low != null ? m.high : c.high;
+      var kind = m.kind || (c.kind === "EST" ? "EST" : "CV");
+      var ref = low == null ? null : (high ? (low + high) / 2 : low);
+      var res = d && d.results && d.results[m.lot];
+      var hist = (d && d.history && d.history[m.lot]) || [];
+      var row = { lot: m.lot, desc: c.desc || m.desc || "", kind: kind, low: low, high: high, ref: ref, basisNote: m.basisNote || "",
+        cur: c.cur || "", page: c.page, bid: c.bid, moved: hist.length > 1, hist: hist,
+        catMismatch: m.low != null && c.low != null && (c.low !== m.low || (c.high || null) !== (m.high || null)),
+        inCatalog: !!c.desc };
+      if (res && res.amount != null) {
+        row.state = "sold"; row.final = res.amount / p; row.resCur = res.cur || "";
+      } else if ((res && res.status) || unsold[m.lot]) row.state = "unsold";
+      else row.state = c.bid != null ? "open" : "nodata";
+      var amt = row.state === "sold" ? row.final : (row.state === "open" ? row.bid : null);
+      row.amt = amt; row.ratio = (amt != null && ref) ? amt / ref : null;
+      row.verdict = verdict(row);
+      return row;
+    });
+  }
+  function verdict(r) {
+    if (r.state === "unsold") return "Unsold";
+    if (r.state === "nodata") return "Not in catalog data";
+    if (r.state === "open") return "Open, no result yet";
+    if (r.high) return r.final < r.low ? "▼ Under estimate" : (r.final > r.high ? "▲ Over estimate" : "● Within estimate");
+    if (r.ratio >= 1) return "▲ At or over CV";
+    return r.ratio >= 0.5 ? "▼ Under CV" : "▼▼ Well under CV";
+  }
+
+  /* ---------- render ---------- */
+  function render() {
+    var d = state.data, meta = (d && d.meta) || {};
+    var sale = state.sales.filter(function (s) { return s.key === state.key; })[0] || {};
+    var fr = d ? "Catalog checked " + ago(meta.catalog_fetched_at) + " · results checked " + ago(meta.results_fetched_at) : "No data collected yet";
+    $("freshness").textContent = fr;
+    var ban = [];
+    if (!d) ban.push("<b>No data yet for this sale.</b> The scheduled job has not run. In GitHub open <i>Actions → Update sale data → Run workflow</i>.");
+    (meta.warnings || []).slice(0, 4).forEach(function (w) { ban.push("<b>Data note:</b> " + esc(w)); });
+    if (d && !meta.results_fetched_at) ban.push("Final prices have not been collected yet. Bars show current bids.");
+    if (d && meta.results_fetched_at && !Object.keys(d.results || {}).length) ban.push("The results page is reachable but empty so far. That is normal before the sale starts.");
+    var rows = state.mine.length ? buildRows() : [];
+    var mism = rows.filter(function (r) { return r.sold !== undefined; });
+    var curBad = rows.some(function (r) { return r.state === "sold" && r.resCur && r.cur && curCode(r.resCur) && curCode(r.cur) && curCode(r.resCur) !== curCode(r.cur); });
+    if (curBad) ban.push("<b>Currency differs</b> between catalog values and final prices for some lots. Percentages for those lots are not meaningful.");
+    var cm = rows.filter(function (r) { return r.catMismatch; }).length;
+    if (cm) ban.push(cm + " lot(s) have a value in your file that differs from the live catalog (marked ⚠). Your file's value is used.");
+    var nf = rows.filter(function (r) { return !r.inCatalog; }).length;
+    if (d && nf && rows.length) ban.push(nf + " of your lots were not found in the catalog data (re-lotted, withdrawn, or data not yet collected).");
+    $("banners").innerHTML = ban.map(function (b) { return '<div class="banner">' + b + "</div>"; }).join("");
+    $("dash").classList.toggle("hide", !rows.length);
+    $("foot").innerHTML = "Source: public pages of <a href=\"" + esc(sale.sale_url || BASE) + "\">StampAuctionNetwork</a> (not affiliated). " +
+      "Percent of value = price ÷ catalog value (CV), or ÷ the midpoint of an estimate range. Catalog values are the firm's and may use different condition bases than your lot, so treat ratios as a guide. " +
+      "Net proceeds also depend on commission and fees, which are not shown.";
+    if (!rows.length) return;
+    kpis(rows, meta); chart(rows, meta); table(rows, meta);
+  }
+
+  function kpis(rows) {
+    var sold = rows.filter(function (r) { return r.state === "sold"; });
+    var sv = sold.reduce(function (a, r) { return a + (r.ref || 0); }, 0), sf = sold.reduce(function (a, r) { return a + r.final; }, 0);
+    var tv = rows.reduce(function (a, r) { return a + (r.ref || 0); }, 0);
+    var unsold = rows.filter(function (r) { return r.state === "unsold"; }).length;
+    var open = rows.filter(function (r) { return r.state === "open"; });
+    var moved = open.filter(function (r) { return r.moved; }).length;
+    var cur = (rows.filter(function (r) { return r.cur; })[0] || {}).cur || "";
+    var items = [
+      [rows.length, "lots tracked"],
+      [money(tv, cur), "total catalog value"],
+      [sold.length + " / " + rows.length, "sold"],
+      [sold.length ? money(sf, cur) : "–", "final prices (sold lots)"],
+      [sold.length && sv ? pct(sf / sv) : "–", "of value, sold lots"],
+      [unsold, "unsold"],
+      [open.length ? moved + " / " + open.length : "–", "open lots with a moved bid"]
+    ];
+    $("kpis").innerHTML = items.map(function (i) { return '<div class="kpi"><div class="v">' + i[0] + '</div><div class="l">' + i[1] + "</div></div>"; }).join("");
+  }
+
+  function chart(rows) {
+    var W = 900, H = 270, L = 44, R = 10, T = 12, B = 34, cap = 3;
+    var pts = rows.filter(function (r) { return r.ratio != null; });
+    if (!pts.length) { $("chart").innerHTML = '<p class="note">No prices to plot yet.</p>'; return; }
+    var n = rows.length, bw = (W - L - R) / n, bar = Math.max(2, Math.min(14, bw - 2));
+    var y = function (v) { return T + (H - T - B) * (1 - Math.min(v, cap) / cap); };
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" role="img" aria-label="Price as percent of value for each lot">';
+    [0, 1, 2, 3].forEach(function (g) {
+      s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(g) + '" y2="' + y(g) + '" stroke="var(--grid)"' + (g === 1 ? ' stroke-dasharray="5 4" stroke-width="1.5" style="stroke:var(--muted)"' : "") + "/>";
+      s += '<text x="' + (L - 6) + '" y="' + (y(g) + 4) + '" text-anchor="end">' + g * 100 + "%</text>";
+    });
+    var every = Math.ceil(n / 12);
+    rows.forEach(function (r, i) {
+      var cx = L + bw * i + bw / 2;
+      if (i % every === 0) s += '<text x="' + cx + '" y="' + (H - 16) + '" text-anchor="middle">' + esc(r.lot) + "</text>";
+      if (r.ratio != null) {
+        var top = y(r.ratio), h = y(0) - top, x = cx - bar / 2;
+        var f = r.state === "sold" ? 'fill="var(--series)"' : 'fill="none" stroke="var(--series)" stroke-width="2"';
+        s += '<rect x="' + x + '" y="' + top + '" width="' + bar + '" height="' + Math.max(h, 1) + '" rx="2" ' + f + "/>";
+        if (r.ratio > cap) s += '<text x="' + cx + '" y="' + (top - 2) + '" text-anchor="middle">▲</text>';
+      }
+      s += '<rect class="hit" data-i="' + i + '" x="' + (cx - bw / 2) + '" y="' + T + '" width="' + bw + '" height="' + (H - T - B) + '" fill="transparent"/>';
+    });
+    s += '<text x="' + (L + (W - L - R) / 2) + '" y="' + (H - 2) + '" text-anchor="middle">Lot number</text></svg>';
+    $("chart").innerHTML = s;
+    var tip = $("tip");
+    $("chart").onmousemove = function (e) {
+      var t = e.target.closest ? e.target.closest(".hit") : null;
+      if (!t) { tip.style.display = "none"; return; }
+      var r = rows[+t.getAttribute("data-i")];
+      tip.innerHTML = "<b>Lot " + esc(r.lot) + "</b><br>" + esc((r.desc || "").slice(0, 70)) + "<br>" +
+        (r.amt != null ? (r.state === "sold" ? "Final " : "Bid ") + money(r.amt, r.cur) + " = " + pct(r.ratio) + " of " + money(r.ref, r.cur) : esc(r.verdict));
+      tip.style.display = "block"; tip.style.left = Math.min(e.clientX + 12, innerWidth - 290) + "px"; tip.style.top = e.clientY + 14 + "px";
+    };
+    $("chart").onmouseleave = function () { tip.style.display = "none"; };
+  }
+
+  var COLS = [
+    ["lot", "Lot", false, function (r) { return parseInt(r.lot, 10) + (r.lot.length > String(parseInt(r.lot, 10)).length ? 0.01 : 0); }],
+    ["desc", "Description", false, function (r) { return r.desc; }],
+    ["ref", "Value", true, function (r) { return r.ref; }],
+    ["bid", "Current bid", true, function (r) { return r.bid; }],
+    ["final", "Final price", true, function (r) { return r.final; }],
+    ["ratio", "% of value", true, function (r) { return r.ratio; }],
+    ["verdict", "Result", false, function (r) { return r.verdict; }]
+  ];
+  function filtered(rows) {
+    var f = $("filter").value, q = $("search").value.trim().toLowerCase();
+    return rows.filter(function (r) {
+      if (f === "sold" && r.state !== "sold") return false; if (f === "open" && r.state !== "open") return false;
+      if (f === "unsold" && r.state !== "unsold") return false; if (f === "await" && r.state !== "nodata") return false;
+      if (f === "moved" && !(r.moved && r.state === "open")) return false;
+      return !q || (r.lot + " " + r.desc).toLowerCase().indexOf(q) >= 0;
+    });
+  }
+  function table(rows, meta) {
+    var col = COLS.filter(function (c) { return c[0] === state.sort.k; })[0] || COLS[0];
+    var list = filtered(rows).sort(function (a, b) {
+      var x = col[3](a), y = col[3](b);
+      if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
+      return (x < y ? -1 : x > y ? 1 : 0) * state.sort.dir;
+    });
+    var h = "<thead><tr>" + COLS.map(function (c) {
+      return '<th class="' + (c[2] ? "num" : "") + '" data-k="' + c[0] + '"' + (state.sort.k === c[0] ? ' aria-sort="' + (state.sort.dir > 0 ? "ascending" : "descending") + '"' : "") + ">" + c[1] + "</th>";
+    }).join("") + "</tr></thead><tbody>";
+    list.forEach(function (r) {
+      var link = r.page && meta.firm ? BASE + "/" + meta.firm + "/" + meta.firm.toLowerCase() + meta.sale + r.page + ".cfm#Lot" + encodeURIComponent(r.lot) : "";
+      var vtxt = r.ref == null ? "–" : (r.high ? money(r.low, r.cur) + "–" + money(r.high) + ' <span class="tag">' + (r.kind === "EST" ? "est" : "apx CV") + "</span>" : money(r.low, r.cur) + ' <span class="tag">CV</span>');
+      h += "<tr><td>" + (link ? '<a href="' + esc(link) + '" target="_blank" rel="noopener">' + esc(r.lot) + "</a>" : esc(r.lot)) + "</td>" +
+        '<td class="desc" title="' + esc(r.desc) + '">' + esc((r.desc || "").slice(0, 110)) + (r.basisNote ? ' <span class="tag" title="' + esc(r.basisNote) + '">ⓘ basis noted</span>' : "") + (r.catMismatch ? ' <span title="Your file and the live catalog disagree on the value">⚠</span>' : "") + "</td>" +
+        '<td class="num">' + vtxt + "</td>" +
+        '<td class="num">' + (r.bid != null ? money(r.bid, r.cur) : "–") + (r.moved ? ' <span class="tag" title="Bid has changed since tracking began">↑moved</span>' : "") + "</td>" +
+        '<td class="num">' + (r.state === "sold" ? money(r.final, r.resCur || r.cur) : "–") + "</td>" +
+        '<td class="num">' + pct(r.ratio) + "</td>" +
+        '<td><span class="chip">' + esc(r.verdict) + "</span></td></tr>";
+    });
+    $("tbl").innerHTML = h + "</tbody>";
+    Array.prototype.forEach.call($("tbl").querySelectorAll("th"), function (th) {
+      th.onclick = function () { var k = th.getAttribute("data-k"); state.sort = { k: k, dir: state.sort.k === k ? -state.sort.dir : 1 }; render(); };
+    });
+    state.visible = list;
+  }
+  $("filter").addEventListener("change", render); $("search").addEventListener("input", render);
+  $("csv").addEventListener("click", function () {
+    var head = ["lot", "description", "kind", "value_low", "value_high", "current_bid", "final_price", "pct_of_value", "result"];
+    var lines = [head.join(",")].concat((state.visible || []).map(function (r) {
+      return [r.lot, '"' + (r.desc || "").replace(/"/g, '""') + '"', r.kind, r.low, r.high || "", r.bid == null ? "" : r.bid, r.state === "sold" ? r.final : "", r.ratio == null ? "" : r.ratio.toFixed(3), '"' + r.verdict + '"'].join(",");
+    }));
+    var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+    a.download = "lots-" + state.key + ".csv"; a.click();
+  });
+  setInterval(function () { if (state.key) fetchJson("data/" + state.key + ".json").then(function (d) { state.data = d; render(); }).catch(function () {}); }, 5 * 60 * 1000);
+})();
+</script>
+</body>
+</html>
