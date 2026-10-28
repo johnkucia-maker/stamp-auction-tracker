@@ -70,7 +70,7 @@
   a { color: var(--series); }
   .tag { font-size: 11px; color: var(--muted); }
   footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
-  .hide { display: none; }
+  .hide { display: none !important; }
   .bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
   .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .cols > .card { min-width: 0; }
@@ -228,7 +228,7 @@
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var BASE = "https://stampauctionnetwork.com";
-  var state = { sales: [], key: null, data: null, mine: [], sort: { k: "lot", dir: 1 } };
+  var state = { sales: [], key: null, data: null, mine: [], sort: { k: "lot", dir: 1 }, editing: false, scope: "mine", tkHtml: "" };
 
   /* ---------- small helpers ---------- */
   function store(op, k, v) { try { if (op === "get") return localStorage.getItem(k); if (op === "set") localStorage.setItem(k, v); if (op === "del") localStorage.removeItem(k); } catch (e) {} return null; }
@@ -262,7 +262,7 @@
   $("saleSel").addEventListener("change", function () { state.key = this.value; store("set", "sale", state.key); location.hash = state.key; loadSale(); });
 
   function loadSale() {
-    state.data = null; state.mine = [];
+    state.data = null; state.mine = []; state.editing = false;
     var saved = store("get", "lots:" + state.key);
     if (saved) { try { state.mine = JSON.parse(saved); setMsg("Loaded " + state.mine.length + " lots saved on this device."); } catch (e) {} }
     else setMsg("");
@@ -274,10 +274,11 @@
   function setMsg(t) { $("loadMsg").textContent = t; }
   function accept(res, src) {
     if (!res.lots.length) { setMsg("No lots were found in " + src + ". Try pasting lot numbers instead."); return; }
-    state.mine = res.lots;
+    state.mine = res.lots; state.editing = false;   /* loaded: roll the panel up */
     store("set", "lots:" + state.key, JSON.stringify(res.lots));
     setMsg("Read " + res.lots.length + " lots from " + src + "." + (res.warnings.length ? " Note: " + res.warnings.join(" ") : ""));
     render();
+    if (res.warnings.length) { state.editing = true; render(); }   /* keep it open so a count mismatch is not missed */
   }
   function readPdf(file) {
     if (!window.pdfjsLib) { setMsg("The PDF reader could not load (are you offline?). Paste lot numbers instead."); return; }
@@ -301,7 +302,12 @@
   ["dragleave", "drop"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("over"); }); });
   drop.addEventListener("drop", function (e) { var f = e.dataTransfer.files[0]; if (f) readPdf(f); });
   $("usePaste").addEventListener("click", function () { accept(StampParser.parseText($("paste").value), "your pasted text"); });
-  $("forget").addEventListener("click", function () { store("del", "lots:" + state.key); state.mine = []; setMsg("Forgotten. Nothing is stored on this device."); render(); });
+  $("forget").addEventListener("click", function () { store("del", "lots:" + state.key); state.mine = []; state.editing = false; setMsg("Forgotten. Nothing is stored on this device."); render(); });
+  $("setupEdit").addEventListener("click", function () { state.editing = true; render(); });
+  $("setupDone").addEventListener("click", function () { state.editing = false; render(); });
+  Array.prototype.forEach.call(document.querySelectorAll(".seg button"), function (b) {
+    b.addEventListener("click", function () { state.scope = b.getAttribute("data-scope"); render(); });
+  });
   $("basis").addEventListener("change", function () { $("premBox").classList.toggle("hide", this.value !== "premium"); render(); });
   $("prem").addEventListener("input", render);
 
@@ -317,7 +323,8 @@
       var res = d && d.results && d.results[m.lot];
       var hist = (d && d.history && d.history[m.lot]) || [];
       var row = { lot: m.lot, desc: c.desc || m.desc || "", kind: kind, low: low, high: high, ref: ref, basisNote: m.basisNote || "",
-        cur: c.cur || "", valNote: c.val_note || "", page: c.page, bid: c.bid, moved: hist.length > 1, hist: hist,
+        cur: c.cur || "", valNote: c.val_note || "", page: c.page, section: c.section || "",
+        seen: (d && d.sold_seen && d.sold_seen[m.lot]) || "", bid: c.bid, moved: hist.length > 1, hist: hist,
         catMismatch: m.low != null && c.low != null && (c.low !== m.low || (c.high || null) !== (m.high || null)),
         inCatalog: !!c.desc };
       if (res && res.amount != null) {
@@ -368,8 +375,183 @@
     $("foot").innerHTML = "Source: public pages of <a href=\"" + esc(sale.sale_url || BASE) + "\">StampAuctionNetwork</a> (not affiliated). " +
       "Percent of value = price ÷ catalog value (CV), or ÷ the midpoint of an estimate range. Catalog values are the firm's and may use different condition bases than your lot, so treat ratios as a guide. " +
       "Net proceeds also depend on commission and fees, which are not shown.";
+    setupView(); ticker(d);
     if (!rows.length) return;
-    kpis(rows, meta); chart(rows, meta); table(rows, meta);
+    kpis(rows, meta); progress(rows, d); highlights(rows); chart(rows, meta); runChart(rows); secChart(rows); table(rows, meta);
+  }
+
+  /* ---------- setup panel: rolls up once lots are loaded ---------- */
+  function setupView() {
+    var has = state.mine.length > 0, collapsed = has && !state.editing;
+    $("setupBody").classList.toggle("hide", collapsed);
+    $("setupBar").classList.toggle("hide", !collapsed);
+    $("setupDone").classList.toggle("hide", !has);
+    if (collapsed) {
+      var basis = $("basis").value === "premium" ? "prices include a " + (Number($("prem").value) || 0) + "% premium" : "prices as posted";
+      $("setupSum").innerHTML = "<b>&#10003; " + state.mine.length + " lots loaded</b> <span class=\"note\">&middot; kept on this device only &middot; " + esc(basis) + "</span>";
+    }
+  }
+
+  /* ---------- shared helpers for the new visuals ---------- */
+  function lotNum(l) { var n = parseInt(l, 10); return (isNaN(n) ? 0 : n) + (/[A-Za-z]$/.test(l) ? 0.01 : 0); }
+  function refOf(c) { return c.low == null ? null : (c.high ? (c.low + c.high) / 2 : c.low); }
+  function short(s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+  function mshort(n, cur) { return n >= 10000 ? (cur || "") + Math.round(n / 1000) + "k" : money(n, cur); }
+
+  /* ---------- "Just sold" ticker ---------- */
+  function ticker(d) {
+    var wrap = $("tickerWrap");
+    wrap.classList.toggle("hide", !d);
+    if (!d) return;
+    Array.prototype.forEach.call(wrap.querySelectorAll(".seg button"), function (b) { b.classList.toggle("on", b.getAttribute("data-scope") === state.scope); });
+    var seen = d.sold_seen || {}, mine = {};
+    state.mine.forEach(function (m) { mine[m.lot] = m; });
+    var items = [];
+    Object.keys(seen).forEach(function (lot) {
+      if (state.scope === "mine" && !mine[lot]) return;
+      var res = (d.results || {})[lot], c = (d.lots || {})[lot] || {};
+      var amt = res && res.amount != null ? res.amount : c.sold;
+      if (amt == null) return;
+      var m = mine[lot], ref = m && m.low != null ? (m.high ? (m.low + m.high) / 2 : m.low) : refOf(c);
+      items.push({ lot: lot, t: seen[lot], amt: amt, cur: (res && res.cur) || c.cur || "", desc: c.desc || (m && m.desc) || "", ref: ref });
+    });
+    items.sort(function (a, b) { return a.t < b.t ? 1 : a.t > b.t ? -1 : lotNum(b.lot) - lotNum(a.lot); });
+    items = items.slice(0, 20);
+    var track = $("tkTrack"), html;
+    if (!items.length) {
+      html = '<span class="tk-item">' + (state.scope === "mine" && !state.mine.length ? "Load your lots to see them here, or switch to All lots." :
+        "Nothing sold yet. New results appear here after each check.") + "</span>";
+      track.style.animation = "none";
+    } else {
+      var one = items.map(function (i) {
+        var r = i.ref ? i.amt / i.ref : null;
+        return '<span class="tk-item"><b>Lot ' + esc(i.lot) + "</b> " + esc(short(i.desc, 44)) + " &middot; <b>" + money(i.amt, i.cur) + "</b>" +
+          (r != null ? " " + (r >= 1 ? "▲" : "▼") + " " + pct(r) + " of value" : "") + ' <span class="tag">' + esc(ago(i.t)) + "</span></span>";
+      }).join("");
+      html = "<span>" + one + '</span><span aria-hidden="true">' + one + "</span>";
+      track.style.animation = ""; track.style.setProperty("--tk-dur", Math.max(30, items.length * 7) + "s");
+    }
+    if (html !== state.tkHtml) { track.innerHTML = html; state.tkHtml = html; }   /* do not restart the scroll if nothing changed */
+  }
+
+  /* ---------- where is the auction? ---------- */
+  function progress(rows, d) {
+    var lots = (d && d.lots) || {}, all = Object.keys(lots).sort(function (a, b) { return lotNum(a) - lotNum(b); });
+    if (!all.length) { $("prog").innerHTML = '<p class="note">The catalog has not been collected yet.</p>'; $("progNote").textContent = ""; return; }
+    var uns = {}; (d.unsold || []).forEach(function (l) { uns[l] = 1; });
+    var n = all.length, rank = {}, closed = [], nClosed = 0, last = -1;
+    all.forEach(function (l, i) {
+      rank[l] = i;
+      var res = (d.results || {})[l], c = lots[l];
+      var cl = !!((res && (res.amount != null || res.status)) || c.sold != null || uns[l]);
+      closed.push(cl); if (cl) { nClosed++; last = i; }
+    });
+    var W = 900, H = 84, L = 14, R = 14, railY = 34, railH = 12, w = W - L - R;
+    var x = function (i) { return L + w * (i + 0.5) / n; };
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" role="img" aria-label="Progress of the sale with your lots marked">';
+    s += '<rect x="' + L + '" y="' + railY + '" width="' + w + '" height="' + railH + '" rx="3" fill="var(--grid)"/>';
+    for (var i = 0; i < n; ) {
+      if (!closed[i]) { i++; continue; }
+      var j = i; while (j < n && closed[j]) j++;
+      s += '<rect x="' + (L + w * i / n) + '" y="' + railY + '" width="' + Math.max(1, w * (j - i) / n) + '" height="' + railH + '" fill="var(--muted)" opacity="0.45"/>';
+      i = j;
+    }
+    if (last >= 0 && last < n - 1) {
+      s += '<line x1="' + (L + w * (last + 1) / n) + '" x2="' + (L + w * (last + 1) / n) + '" y1="' + (railY - 8) + '" y2="' + (railY + railH + 8) + '" stroke="var(--text)" stroke-width="1.5"/>' +
+        '<text x="' + (L + w * (last + 1) / n) + '" y="' + (railY - 12) + '" text-anchor="middle">Closing now: lot ' + esc(all[last]) + "</text>";
+    }
+    rows.forEach(function (r) {
+      if (rank[r.lot] == null) return;
+      var cx = x(rank[r.lot]), cy = railY + railH / 2, tt = "<title>Lot " + esc(r.lot) + " · " + esc(r.verdict) + "</title>";
+      if (r.state === "sold") s += '<circle cx="' + cx + '" cy="' + cy + '" r="5" fill="var(--series)">' + tt + "</circle>";
+      else if (r.state === "unsold") s += '<g stroke="var(--series)" stroke-width="2">' + tt + '<line x1="' + (cx - 4) + '" x2="' + (cx + 4) + '" y1="' + (cy - 4) + '" y2="' + (cy + 4) + '"/><line x1="' + (cx - 4) + '" x2="' + (cx + 4) + '" y1="' + (cy + 4) + '" y2="' + (cy - 4) + '"/></g>';
+      else s += '<circle cx="' + cx + '" cy="' + cy + '" r="5" fill="var(--surface)" stroke="var(--series)" stroke-width="2">' + tt + "</circle>";
+    });
+    for (var k = 0; k <= 4; k++) { var ix = Math.min(n - 1, Math.round((n - 1) * k / 4)); s += '<text x="' + x(ix) + '" y="' + (railY + railH + 22) + '" text-anchor="' + (k === 0 ? "start" : k === 4 ? "end" : "middle") + '">Lot ' + esc(all[ix]) + "</text>"; }
+    $("prog").innerHTML = s + "</svg>";
+
+    var note = nClosed + " of " + n + " lots in the sale have closed (" + Math.round(100 * nClosed / n) + "%).";
+    var nxt = rows.filter(function (r) { return rank[r.lot] != null && !closed[rank[r.lot]]; }).sort(function (a, b) { return rank[a.lot] - rank[b.lot]; });
+    var ahead = nxt.filter(function (r) { return rank[r.lot] > last; })[0] || nxt[0];
+    if (nClosed === n) note += " The sale has finished closing.";
+    else if (ahead) note += " Your next lot is " + ahead.lot + (rank[ahead.lot] > last ? ", about " + (rank[ahead.lot] - last) + " lots away." : ".");
+    else note += " None of your remaining lots are waiting to close.";
+    /* rough pace: only lots first seen after the first check, so the opening snapshot does not distort it */
+    var ts = Object.keys(d.sold_seen || {}).map(function (l) { return new Date(d.sold_seen[l]).getTime(); }).filter(function (t) { return !isNaN(t); });
+    if (ts.length && nClosed < n) {
+      var t0 = Math.min.apply(null, ts), t1 = Math.max.apply(null, ts), later = ts.filter(function (t) { return t > t0; }).length;
+      if (later >= 5 && t1 - t0 >= 20 * 60000) {
+        var perHour = later / ((t1 - t0) / 3600000), hrs = (n - nClosed) / perHour;
+        note += " Rough pace so far: " + Math.round(perHour) + " lots an hour, so the rest could take about " + (hrs < 1 ? Math.round(hrs * 60) + " minutes" : hrs.toFixed(1) + " hours") + " (pace changes during a sale).";
+      }
+    }
+    $("progNote").textContent = note;
+  }
+
+  /* ---------- highlights ---------- */
+  function highlights(rows) {
+    var sold = rows.filter(function (r) { return r.state === "sold"; });
+    var rat = sold.filter(function (r) { return r.ratio != null; }).sort(function (a, b) { return b.ratio - a.ratio; });
+    var best = rat.slice(0, 3), bestSet = {}; best.forEach(function (r) { bestSet[r.lot] = 1; });
+    var weak = rat.slice().reverse().filter(function (r) { return !bestSet[r.lot]; }).slice(0, 3);
+    var top = sold.slice().sort(function (a, b) { return b.final - a.final; }).slice(0, 3);
+    var hot = rows.filter(function (r) { return r.state === "open"; }).sort(function (a, b) { return b.hist.length - a.hist.length || (b.bid || 0) - (a.bid || 0); }).slice(0, 3);
+    function list(title, arr, right, empty) {
+      return "<div><h3>" + title + "</h3><ol>" + (arr.length ? arr.map(function (r) {
+        return "<li><span>Lot " + esc(r.lot) + " <span class=\"tag\">" + esc(short(r.desc, 26)) + "</span></span><span>" + right(r) + "</span></li>";
+      }).join("") : '<li><span class="tag">' + empty + "</span></li>") + "</ol></div>";
+    }
+    $("hl").innerHTML =
+      list("Best against value", best, function (r) { return (r.ratio >= 1 ? "▲ " : "▼ ") + pct(r.ratio); }, "No sold lots with a value yet") +
+      list("Weakest against value", weak, function (r) { return (r.ratio >= 1 ? "▲ " : "▼ ") + pct(r.ratio); }, "Needs two or more sold lots") +
+      list("Highest prices", top, function (r) { return money(r.final, r.resCur || r.cur); }, "Nothing sold yet") +
+      list("Most-watched open lots", hot, function (r) { return money(r.bid, r.cur) + (r.moved ? " · " + r.hist.length + " bids seen" : ""); }, "No open lots with a bid");
+  }
+
+  /* ---------- running total ---------- */
+  function runChart(rows) {
+    var el = $("run");
+    var s = rows.filter(function (r) { return r.state === "sold" && r.ref != null; }).sort(function (a, b) { return a.seen < b.seen ? -1 : a.seen > b.seen ? 1 : lotNum(a.lot) - lotNum(b.lot); });
+    if (s.length < 2) { el.innerHTML = '<p class="note">This chart appears once two of your lots with a catalog value have sold.</p>'; return; }
+    var cf = 0, cr = 0, F = [], V = [];
+    s.forEach(function (r) { cf += r.final; cr += r.ref; F.push(cf); V.push(cr); });
+    var cur = s[0].resCur || s[0].cur || "", W = 460, H = 240, L = 46, R = 58, T = 14, B = 34, mx = Math.max(cf, cr) * 1.05;
+    var X = function (i) { return L + (W - L - R) * i / (s.length - 1); }, Y = function (v) { return T + (H - T - B) * (1 - v / mx); };
+    var pts = function (a) { return a.map(function (v, i) { return X(i).toFixed(1) + "," + Y(v).toFixed(1); }).join(" "); };
+    var g = '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" role="img" aria-label="Running total of final prices against catalog value">';
+    [0, 0.5, 1].forEach(function (f) { var v = mx * f; g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="var(--grid)"/><text x="' + (L - 6) + '" y="' + (Y(v) + 4) + '" text-anchor="end">' + mshort(v, cur) + "</text>"; });
+    g += '<polyline points="' + pts(V) + '" fill="none" stroke="var(--muted)" stroke-width="2" stroke-dasharray="5 4"/>';
+    g += '<polyline points="' + pts(F) + '" fill="none" stroke="var(--series)" stroke-width="2.5" stroke-linejoin="round"/>';
+    var yf = Y(cf), yv = Y(cr); if (Math.abs(yf - yv) < 13) { if (yf <= yv) yf -= 7; else yf += 7; }
+    g += '<text x="' + (W - R + 6) + '" y="' + (yf + 4) + '" style="fill:var(--text);font-weight:600">' + mshort(cf, cur) + "</text>";
+    g += '<text x="' + (W - R + 6) + '" y="' + (Y(cr) + 4 + (yf !== Y(cf) ? (yf < Y(cf) ? 7 : -7) : 0)) + '">' + mshort(cr, cur) + "</text>";
+    g += '<text x="' + (L + (W - L - R) / 2) + '" y="' + (H - 6) + '" text-anchor="middle">Your sold lots, in the order they closed (1 to ' + s.length + ")</text></svg>";
+    el.innerHTML = g + '<p class="note" style="margin:6px 0 0">So far: ' + money(cf, cur) + " against " + money(cr, cur) + " of value (" + pct(cf / cr) + ").</p>";
+  }
+
+  /* ---------- by section ---------- */
+  function secChart(rows) {
+    var el = $("sec"), g = {};
+    rows.forEach(function (r) {
+      if (r.state !== "sold" || r.ref == null || !r.section) return;
+      var o = g[r.section] || (g[r.section] = { f: 0, v: 0, n: 0 }); o.f += r.final; o.v += r.ref; o.n++;
+    });
+    var keys = Object.keys(g);
+    if (!keys.length) { el.innerHTML = '<p class="note">' + (rows.some(function (r) { return r.section; }) ? "Appears once one of your lots with a catalog value has sold." : "Section names are not in the data yet.") + "</p>"; return; }
+    keys.sort(function (a, b) { return g[b].f / g[b].v - g[a].f / g[a].v; });
+    var extra = Math.max(0, keys.length - 10); keys = keys.slice(0, 10);
+    var W = 460, LBL = 160, RV = 64, rh = 26, cap = 2, H = keys.length * rh + 26, aw = W - LBL - RV;
+    var X = function (v) { return LBL + aw * Math.min(v, cap) / cap; };
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" role="img" aria-label="Sold price as percent of value for each section">';
+    keys.forEach(function (k, i) {
+      var o = g[k], r = o.f / o.v, y = 4 + i * rh;
+      s += '<text x="' + (LBL - 8) + '" y="' + (y + 14) + '" text-anchor="end">' + esc(short(k, 26)) + "<title>" + esc(k) + "</title></text>" +
+        '<rect x="' + LBL + '" y="' + (y + 3) + '" width="' + Math.max(2, X(r) - LBL) + '" height="14" rx="2" fill="var(--series)"/>' +
+        '<text x="' + (W - 2) + '" y="' + (y + 14) + '" text-anchor="end">' + pct(r) + " (" + o.n + ")</text>";
+    });
+    s += '<line x1="' + X(1) + '" x2="' + X(1) + '" y1="0" y2="' + (keys.length * rh + 4) + '" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="5 4"/>' +
+      '<text x="' + X(1) + '" y="' + (H - 6) + '" text-anchor="middle">100%</text></svg>';
+    el.innerHTML = s + '<p class="note" style="margin:6px 0 0">(n) is the number of your lots sold in that section.' + (extra ? " " + extra + " more sections not shown." : "") + "</p>";
   }
 
   function kpis(rows) {
