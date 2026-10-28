@@ -19,6 +19,7 @@ CATALOG = """
  <td>Cat. US$6,000 SE<br><b>Currently...$300.00</b><br>Will close during Public Auction</td></tr>
 <tr><td>511</td><td>x</td><td>NEWFOUNDLAND complete sheet of 40</td><td>Cat. Val. 11280.00 Currently C$ 2,300</td></tr>
 <tr><td>600</td><td>x</td><td>No bid yet lot</td><td>Cat. US$100</td></tr>
+<tr><td>1433</td><td>x</td><td>40,\n42 F-VF odd\n lot</td><td>Pounds 778 SE Currently...$110.00 Will close during Public Auction</td></tr>
 </table>
 """
 
@@ -34,7 +35,9 @@ RESULTS = """
 </tr></table>
 """
 
-FRONT = '<a href="https://stampauctionnetwork.com/TS/ts36713.cfm#64">x</a> <a href="/TS/ts3671.cfm#1">y</a> <a href="https://stampauctionnetwork.com/TS/ts36713.cfm#65">z</a>'
+FRONT = ('<a href="https://stampauctionnetwork.com/TS/ts36713.cfm#64">x</a> <a href="/TS/ts3671.cfm#1">y</a> '
+         '<A HREF="ts36773.cfm">z</A> <A HREF="ts367100.cfm">w</A> <a href="https://StampAuctionNetwork.com/TS/TS367.cfm">home</a> '
+         '<a href="https://stampauctionnetwork.com/RM/rm5921.cfm">other firm</a>')
 
 ERROR_PAGE = "<h1>Prices Realized for StampAuctionNetwork's Sale 9999,</h1> Element SALE_DATE is undefined in SESSION."
 
@@ -49,7 +52,9 @@ check.failed = False
 
 sec, lots = f.parse_catalog_page(CATALOG, 13)
 check("section heading", sec == "US 19th & 20th Century Stamps")
-check("5 lots parsed", set(lots) == {"241", "244", "243", "511", "600"})
+check("6 lots parsed", set(lots) == {"241", "244", "243", "511", "600", "1433"})
+check("odd value wording kept as a note, not a number", "low" not in lots["1433"] and lots["1433"]["val_note"].startswith("Pounds 778") and lots["1433"]["bid"] == 110)
+check("line breaks in description collapsed", lots["1433"]["desc"] == "40, 42 F-VF odd lot")
 check("CV lot", lots["241"]["kind"] == "CV" and lots["241"]["low"] == 565 and lots["241"]["bid"] == 90)
 check("currency US$", lots["241"]["cur"] == "US$")
 check("estimate range", lots["244"]["kind"] == "EST" and lots["244"]["low"] == 200 and lots["244"]["high"] == 300)
@@ -68,7 +73,10 @@ check("handshake fails on wrong sale", not f.parse_results(RESULTS, "367")["hand
 check("handshake fails on error page", not f.parse_results(ERROR_PAGE, "367")["handshake_ok"])
 
 links = f.catalog_page_links(FRONT, "TS", "367")
-check("catalog links deduped and sorted", [n for n, _ in links] == [1, 13])
+check("catalog links: absolute + bare relative, deduped, sorted, home page and other firms ignored", [n for n, _ in links] == [1, 13, 73, 100])
+check("catalog link rebuilt as full path", links[0][1] == "/TS/ts3671.cfm")
+rl = f.catalog_page_links('<A HREF="rm59219.cfm">a</A> <a href="RM592.cfm">b</a>', "RM", "592")
+check("Maresch-style links", [n for n, _ in rl] == [19])
 
 check("unsold lot numbers", f.parse_unsold("<p>Lot 88 something</p><table><tr><td>90</td><td>x</td></tr></table>") == ["88", "90"])
 

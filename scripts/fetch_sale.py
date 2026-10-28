@@ -93,14 +93,20 @@ def parse_catalog_page(html: str, page_no: int):
         if not LOT_RE.match(lot):
             continue
         desc_td, val_td = tds[-2], tds[-1]
-        desc = desc_td.get_text(" ", strip=True)
+        desc = re.sub(r"\s+", " ", desc_td.get_text(" ", strip=True))
         desc = re.split(r"\(Image\)|Get Market Data", desc)[0].strip()
-        cell = val_td.get_text(" ", strip=True)
+        cell = re.sub(r"\s+", " ", val_td.get_text(" ", strip=True))
         rec = {"desc": desc, "page": page_no, "section": section, "cell": cell}
         m = CV_RE.search(cell)
         if m:
             kind = "CV" if m.group(1).lower().startswith("cat") else "EST"
             rec.update(kind=kind, cur=norm_cur(m.group(2)), low=num(m.group(3)), high=num(m.group(4)))
+        if not m:
+            # Unusual value wording, e.g. "Pounds 778 SE Currently...$110.00". Keep the text but
+            # do NOT turn it into a number: it may be in a different currency than the bids.
+            pre = re.split(r"Currently", cell, flags=re.I)[0].strip()
+            if pre:
+                rec["val_note"] = pre
         b = BID_RE.search(cell)
         if b:
             rec["bid"] = num(b.group(2))
@@ -154,12 +160,15 @@ def parse_unsold(html: str):
 
 
 def catalog_page_links(html: str, firm: str, sale: str):
-    """Find paged catalog URLs like /TS/ts36713.cfm on the sale's front page."""
-    pat = re.compile(rf"/{re.escape(firm)}/{re.escape(firm)}{re.escape(sale)}(\d+)\.cfm", re.I)
-    seen = {}
-    for m in pat.finditer(html):
-        seen[int(m.group(1))] = m.group(0)
-    return [(n, seen[n]) for n in sorted(seen)]
+    """Find paged catalog URLs on the sale's front page.
+
+    SAN writes them as bare relative links (HREF="ts36773.cfm", HREF="rm59219.cfm"),
+    and sometimes as full addresses (.../TS/ts36772.cfm#Lot1422). Match both.
+    """
+    pat = re.compile(rf"(?<![A-Za-z0-9]){re.escape(firm.strip())}{re.escape(sale)}(\d+)\.cfm", re.I)
+    pages = sorted({int(m.group(1)) for m in pat.finditer(html)})
+    f = firm.strip()
+    return [(n, f"/{f}/{f.lower()}{sale}{n}.cfm") for n in pages]
 
 
 # --------------------------------------------------------------------------
