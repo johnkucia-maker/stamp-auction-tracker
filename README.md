@@ -73,6 +73,27 @@ The test sale **RM-592** (R. Maresch, ends Oct 29) is included on purpose. It ha
 - Before the sale you see current bids. As lots close you see final prices and a result such as "Under CV".
 - "Bid has moved" shows lots whose bid changed since tracking began. Until a bid moves, the number you see may be just the opening bid.
 
+## Reading the page
+
+- **Where is the auction?** Shows how far the sale has got. Before the sale it reads "0 of N lots closed (0%)" and every one of your lots is a hollow dot. As lots close, the closed stretch is shaded and a "Closing now" marker appears.
+- **Price chart, two views.** The switch above the chart flips between **% of value** (the dashed line is 100%) and **$ vs value** (a pale bar is the catalog value, a solid bar is the final price, a hollow bar is a bid still open; one dollar scale). In the $ view the scale is capped when a few huge lots would flatten everything else; a ▲ marks the bars that run off the top. Hover or tap a bar for its real numbers. The page remembers which view you chose.
+- **Photo of a lot.** Hover over a lot number in the table (on a phone, tap it once) to see its photo from SAN. Tap or click again to open the lot on SAN. Photos are fetched only when you ask for one. If SAN has no photo, or refuses to show it on another site, you see "no image".
+- **What kinds of lots did well?** Four small charts: by condition grade, certified or not, mint / used / cover, and by value band (with the share of closed lots that went unsold). These groups are **guessed from keywords** (for example PSE, PF or Weiss mean certified; "NH" or "**" means mint). They are approximate, and with about 100 lots each group is small, so read them as hints, not trends. Each row shows n, the number of lots in the group. Rows with fewer than 3 sold lots are drawn pale and say "too few to judge".
+
+## Refreshing by hand
+
+The job already runs every 15 minutes. To force a refresh, scroll to the bottom of the page and click **Refresh now**. This opens the repository's *Update sale data* page on GitHub. Press **Run workflow** (and the green button inside the box), wait a minute or two, then reload the page.
+
+This only works for the person who owns the repository (you must be signed in to GitHub with access to it). Everyone else lands on a GitHub page that will not let them run it, which does no harm. The link works out the repository from the page address (`https://NAME.github.io/REPO/`). If your page is on another address, add `"repo": "https://github.com/NAME/REPO"` at the top level of `sales.json` (next to `"sales"`).
+
+## Updating one file later
+
+1. In your repository click the file name (for example `index.html`).
+2. Click the **pencil icon** (Edit this file), top right of the file box.
+3. Press **Ctrl+A** to select everything, then paste the new version over it.
+4. Click **Commit changes**, then **Commit changes** again in the box.
+5. Click **Actions** → **Update sale data** → **Run workflow** → green **Run workflow** button.
+
 ## Sharing it
 
 Send people your page address. Each person drops in their own PDF, or pastes their lot numbers, and sees only their lots. Their lists stay on their own computer.
@@ -92,7 +113,7 @@ Times are in UTC. US Eastern is 4 hours behind UTC until November 1, 2026 and 5 
 - **Final prices on SAN do not say if buyer's premium is included.** The page has a setting for this. Ask the auction firm, or compare one lot's last bid to its final price after it closes.
 - **Net proceeds are not shown.** They depend on the firm's commission and fees.
 - **Catalog values can use a different condition basis** than your lot (for example "CV listed is for no gum"). Those lots are tagged "basis noted". Treat percentages as a guide.
-- **Unsold lots:** SAN lists them on a separate page. The unsold list is read on a best-effort basis because its layout has not been confirmed. Check it against SAN itself.
+- **Unsold lots:** SAN's "Unsold Lots" page really lists every lot that has *not sold yet*, including lots that have not closed. Before a sale it lists the whole catalog. So the page only counts a lot as unsold once the sale has moved past it (its number is below the highest lot that has sold). Two small side effects: a lot is not called unsold until the lot after it has sold, and the very last lots of a sale that pass unsold stay "open" until you check SAN.
 - **Be a good guest.** The job pauses a second between requests and only runs during sales. Consider emailing support@stampauctionnetwork.com to say you are doing this. If they ask you to stop, stop. This project is not affiliated with SAN.
 - **If SAN says no** (HTTP 403, or `HANDSHAKE_FAILED` every time), the fallback is manual: on the SAN sale page click **Realizations**, copy the page text, and paste it to Claude, who can read it.
 - GitHub pauses scheduled jobs in a repository with no activity for 60 days. Press **Run workflow** once to wake it.
@@ -102,7 +123,7 @@ Times are in UTC. US Eastern is 4 hours behind UTC until November 1, 2026 and 5 
 | File | What it is |
 |---|---|
 | `index.html` | The web page |
-| `parser.js` | Reads the PDF/paste text in your browser |
+| `parser.js` | Reads the PDF/paste text in your browser, and guesses grade / certified / mint-used-cover from keywords |
 | `sales.json` | Which auctions to track, and when |
 | `scripts/fetch_sale.py` | The program that reads SAN |
 | `scripts/test_parsers.py` | Self-test that runs before every fetch |

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Auction Lot Tracker</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%2032%2032%27%3E%3Cstyle%3E.s%7Bfill:%232a78d6%7D.g%7Bfill:%23fff%7D%40media%20(prefers-color-scheme:dark)%7B.s%7Bfill:%236aa6f2%7D.g%7Bfill:%230f1a2b%7D%7D%3C/style%3E%3Cdefs%3E%3Cmask%20id=%27m%27%3E%3Crect%20width=%2732%27%20height=%2732%27%20fill=%27%23fff%27/%3E%3Cg%20fill=%27%23000%27%3E%3Ccircle%20cx=%277%27%20cy=%273%27%20r=%271.5%27/%3E%3Ccircle%20cx=%277%27%20cy=%2729%27%20r=%271.5%27/%3E%3Ccircle%20cx=%2711%27%20cy=%273%27%20r=%271.5%27/%3E%3Ccircle%20cx=%2711%27%20cy=%2729%27%20r=%271.5%27/%3E%3Ccircle%20cx=%2715%27%20cy=%273%27%20r=%271.5%27/%3E%3Ccircle%20cx=%2715%27%20cy=%2729%27%20r=%271.5%27/%3E%3Ccircle%20cx=%2719%27%20cy=%273%27%20r=%271.5%27/%3E%3Ccircle%20cx=%2719%27%20cy=%2729%27%20r=%271.5%27/%3E%3Ccircle%20cx=%2723%27%20cy=%273%27%20r=%271.5%27/%3E%3Ccircle%20cx=%2723%27%20cy=%2729%27%20r=%271.5%27/%3E%3Ccircle%20cx=%2727%27%20cy=%273%27%20r=%271.5%27/%3E%3Ccircle%20cx=%2727%27%20cy=%2729%27%20r=%271.5%27/%3E%3Ccircle%20cx=%273%27%20cy=%277%27%20r=%271.5%27/%3E%3Ccircle%20cx=%2729%27%20cy=%277%27%20r=%271.5%27/%3E%3Ccircle%20cx=%273%27%20cy=%2711%27%20r=%271.5%27/%3E%3Ccircle%20cx=%2729%27%20cy=%2711%27%20r=%271.5%27/%3E%3Ccircle%20cx=%273%27%20cy=%2715%27%20r=%271.5%27/%3E%3Ccircle%20cx=%2729%27%20cy=%2715%27%20r=%271.5%27/%3E%3Ccircle%20cx=%273%27%20cy=%2719%27%20r=%271.5%27/%3E%3Ccircle%20cx=%2729%27%20cy=%2719%27%20r=%271.5%27/%3E%3Ccircle%20cx=%273%27%20cy=%2723%27%20r=%271.5%27/%3E%3Ccircle%20cx=%2729%27%20cy=%2723%27%20r=%271.5%27/%3E%3Ccircle%20cx=%273%27%20cy=%2727%27%20r=%271.5%27/%3E%3Ccircle%20cx=%2729%27%20cy=%2727%27%20r=%271.5%27/%3E%3C/g%3E%3C/mask%3E%3C/defs%3E%3Crect%20x=%273%27%20y=%273%27%20width=%2726%27%20height=%2726%27%20class=%27s%27%20mask=%27url(%23m)%27/%3E%3Ccircle%20cx=%2716%27%20cy=%2714%27%20r=%274.2%27%20class=%27g%27/%3E%3Crect%20x=%2710.5%27%20y=%2720.5%27%20width=%2711%27%20height=%272.2%27%20rx=%271%27%20class=%27g%27/%3E%3C/svg%3E">
 <style>
   :root {
     color-scheme: light;
@@ -93,6 +94,20 @@
   .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
   .seg button { border: 0; border-radius: 0; padding: 3px 10px; font-size: 12px; background: transparent; }
   .seg button.on { background: var(--chip); font-weight: 600; }
+  .cardhead { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .cardhead h2 { margin: 0; }
+  .sw.ghost { background: var(--series); opacity: .25; }
+  .quad { display: grid; grid-template-columns: 1fr 1fr; gap: 22px 28px; }
+  .quad > div { min-width: 0; }
+  @media (max-width: 860px) { .quad { grid-template-columns: 1fr; } }
+  .quad h3 { font-size: 13px; margin: 0 0 4px; }
+  svg text.tiny { font-size: 10px; fill: var(--muted); }
+  @media (max-width: 600px) { #prog svg text { font-size: 25px; } }
+  a.lotlink { text-decoration: underline dotted; text-underline-offset: 3px; -webkit-tap-highlight-color: transparent; }
+  #imgpop { position: fixed; z-index: 20; display: none; pointer-events: none; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px; padding: 6px; box-shadow: 0 8px 28px rgba(0,0,0,.28); max-width: min(340px, calc(100vw - 16px)); }
+  #imgpop img { display: block; max-width: 100%; max-height: min(55vh, 320px); border-radius: 6px; }
+  #imgpop .ipcap { font-size: 12px; color: var(--text-2); padding: 2px 4px; }
 </style>
 </head>
 <body>
@@ -168,7 +183,7 @@
         <span><span class="sw solid" style="border-radius:50%"></span>Your lot, sold</span>
         <span><span class="sw hollow" style="border-radius:50%"></span>Your lot, upcoming or open</span>
         <span>&times; Unsold</span>
-        <span>Shaded = already sold sale-wide</span>
+        <span>Shaded = lots that have closed</span>
       </div>
     </section>
 
@@ -178,13 +193,13 @@
     </section>
 
     <section class="card">
-      <h2 id="chartTitle">Price as % of value, by lot</h2>
-      <div class="legend">
-        <span><span class="sw solid"></span>Sold (final price)</span>
-        <span><span class="sw hollow"></span>Open (current bid)</span>
-        <span>Dashed line = 100% of catalog value (midpoint of an estimate range)</span>
+      <div class="cardhead">
+        <h2 id="chartTitle">Price as % of value, by lot</h2>
+        <span class="seg" role="group" aria-label="Chart view" id="cmodeSeg"><button type="button" data-cmode="pct" aria-pressed="true" class="on">% of value</button><button type="button" data-cmode="usd" aria-pressed="false">$ vs value</button></span>
       </div>
+      <div class="legend" id="chartLegend"></div>
       <div id="chart"></div>
+      <p class="note" id="chartNote" style="margin:6px 0 0"></p>
     </section>
 
     <div class="cols">
@@ -203,6 +218,17 @@
       </section>
     </div>
 
+    <section class="card" id="stampsCard">
+      <h2>What kinds of lots did well?</h2>
+      <p class="note" style="margin:0 0 12px">Groups are <b>approximate</b>: they are guessed from keywords in SAN's symbol and the descriptions (for example PSE, PF or Weiss mean certified). With about 100 lots the groups are small, so read these as hints, not trends. <b>n</b> is the number of your lots in the group; bars use sold lots that have a catalog value.</p>
+      <div class="quad">
+        <div><h3>By condition grade</h3><div id="gGrade"></div></div>
+        <div><h3>Certified or not</h3><div id="gCert"></div></div>
+        <div><h3>Mint, used or cover</h3><div id="gKind"></div></div>
+        <div><h3>By value band</h3><div id="gBand"></div></div>
+      </div>
+    </section>
+
     <section class="card">
       <div class="tools">
         <h2 style="margin:0">Lots</h2>
@@ -214,6 +240,7 @@
         <span class="sp"></span>
         <button id="csv">Download CSV</button>
       </div>
+      <p class="note" style="margin:0 0 8px">Hover over a lot number (or tap it once on a phone) to see its photo from SAN. Click it to open the lot on SAN.</p>
       <div class="scroll"><table id="tbl"></table></div>
     </section>
   </div>
@@ -221,14 +248,15 @@
   <footer id="foot"></footer>
 </div>
 <div id="tip" role="tooltip"></div>
+<div id="imgpop" role="tooltip" aria-live="polite"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="parser.js"></script>
+<script src="parser.js?v=3"></script>
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var BASE = "https://stampauctionnetwork.com";
-  var state = { sales: [], key: null, data: null, mine: [], sort: { k: "lot", dir: 1 }, editing: false, scope: "mine", tkHtml: "" };
+  var state = { sales: [], key: null, data: null, mine: [], sort: { k: "lot", dir: 1 }, editing: false, scope: "mine", tkHtml: "", cmode: store("get", "cmode") === "usd" ? "usd" : "pct", repo: "" };
 
   /* ---------- small helpers ---------- */
   function store(op, k, v) { try { if (op === "get") return localStorage.getItem(k); if (op === "set") localStorage.setItem(k, v); if (op === "del") localStorage.removeItem(k); } catch (e) {} return null; }
@@ -242,13 +270,20 @@
     var h = Math.round(m / 60); if (h < 48) return h + " h ago";
     return Math.round(h / 24) + " days ago";
   }
+  /* The repository that feeds this page. On GitHub Pages it can be worked out from the address
+     (https://NAME.github.io/REPO/ -> https://github.com/NAME/REPO); sales.json may override it with "repo". */
+  function repoUrl(cfg) {
+    if (cfg && cfg.repo) return String(cfg.repo).replace(/\/+$/, "");
+    var h = location.hostname.match(/^([^.]+)\.github\.io$/i), seg = location.pathname.split("/").filter(Boolean)[0];
+    return h && seg && !/\.html?$/i.test(seg) ? "https://github.com/" + h[1] + "/" + seg : "";
+  }
   function curCode(c) { return { "US$": "USD", "C$": "CAD", "A$": "AUD", "NZ$": "NZD", "£": "GBP", "€": "EUR" }[c] || ""; }
 
   /* ---------- load sales + data ---------- */
   function fetchJson(url) { return fetch(url + (url.indexOf("?") < 0 ? "?" : "&") + "t=" + Date.now()).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }); }
 
   fetchJson("sales.json").then(function (cfg) {
-    state.sales = cfg.sales;
+    state.sales = cfg.sales; state.repo = repoUrl(cfg);
     var sel = $("saleSel");
     cfg.sales.forEach(function (s) { var o = document.createElement("option"); o.value = s.key; o.textContent = s.label; sel.appendChild(o); });
     var want = (location.hash || "").replace("#", "") || store("get", "sale") || cfg.sales[0].key;
@@ -305,8 +340,11 @@
   $("forget").addEventListener("click", function () { store("del", "lots:" + state.key); state.mine = []; state.editing = false; setMsg("Forgotten. Nothing is stored on this device."); render(); });
   $("setupEdit").addEventListener("click", function () { state.editing = true; render(); });
   $("setupDone").addEventListener("click", function () { state.editing = false; render(); });
-  Array.prototype.forEach.call(document.querySelectorAll(".seg button"), function (b) {
+  Array.prototype.forEach.call(document.querySelectorAll(".ticker .seg button"), function (b) {
     b.addEventListener("click", function () { state.scope = b.getAttribute("data-scope"); render(); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("#cmodeSeg button"), function (b) {
+    b.addEventListener("click", function () { state.cmode = b.getAttribute("data-cmode"); store("set", "cmode", state.cmode); render(); });
   });
   $("basis").addEventListener("change", function () { $("premBox").classList.toggle("hide", this.value !== "premium"); render(); });
   $("prem").addEventListener("input", render);
@@ -314,7 +352,7 @@
   /* ---------- model ---------- */
   function buildRows() {
     var d = state.data, p = $("basis").value === "premium" ? 1 + (Number($("prem").value) || 0) / 100 : 1;
-    var unsold = {}; ((d && d.unsold) || []).forEach(function (l) { unsold[l] = true; });
+    var unsold = unsoldSet(d);
     return state.mine.map(function (m) {
       var c = (d && d.lots && d.lots[m.lot]) || {};
       var low = m.low != null ? m.low : c.low, high = m.low != null ? m.high : c.high;
@@ -327,6 +365,8 @@
         seen: (d && d.sold_seen && d.sold_seen[m.lot]) || "", bid: c.bid, moved: hist.length > 1, hist: hist,
         catMismatch: m.low != null && c.low != null && (c.low !== m.low || (c.high || null) !== (m.high || null)),
         inCatalog: !!c.desc };
+      row.sym = c.sym || "";
+      row.cls = StampParser.classify ? StampParser.classify({ sym: c.sym, text: (m.desc || "") + " " + (c.desc || "") }) : null;
       if (res && res.amount != null) {
         row.state = "sold"; row.final = res.amount / p; row.resCur = res.cur || ""; row.src = "results page";
         if (c.sold != null && c.sold !== res.amount) row.srcNote = "Catalog says sold for " + c.sold + " but the results page says " + res.amount;
@@ -374,10 +414,12 @@
     $("dash").classList.toggle("hide", !rows.length);
     $("foot").innerHTML = "Source: public pages of <a href=\"" + esc(sale.sale_url || BASE) + "\">StampAuctionNetwork</a> (not affiliated). " +
       "Percent of value = price ÷ catalog value (CV), or ÷ the midpoint of an estimate range. Catalog values are the firm's and may use different condition bases than your lot, so treat ratios as a guide. " +
-      "Net proceeds also depend on commission and fees, which are not shown.";
+      "Net proceeds also depend on commission and fees, which are not shown." +
+      (state.repo ? ' <span class="refresh">Page owner: <a href="' + esc(state.repo) + '/actions/workflows/update.yml" target="_blank" rel="noopener">Refresh now</a> ' +
+        "(opens the GitHub job page; press <i>Run workflow</i> there. It only works if you are signed in to GitHub with access to this repository.)</span>" : "");
     setupView(); ticker(d);
     if (!rows.length) return;
-    kpis(rows, meta); progress(rows, d); highlights(rows); chart(rows, meta); runChart(rows); secChart(rows); table(rows, meta);
+    kpis(rows, meta); progress(rows, d); highlights(rows); chart(rows, meta); runChart(rows); secChart(rows); stampCharts(rows); table(rows, meta);
   }
 
   /* ---------- setup panel: rolls up once lots are loaded ---------- */
@@ -393,6 +435,20 @@
   }
 
   /* ---------- shared helpers for the new visuals ---------- */
+  /* SAN's Unsold page lists every lot that has not sold, including lots that have not closed yet (before
+     the sale it lists the whole catalog). Sales close in lot order, so a lot only counts as unsold once
+     the sale has moved past it: its number is below the highest lot known to have sold. */
+  function soldFrontier(d) {
+    var best = -1;
+    Object.keys((d && d.results) || {}).forEach(function (l) { if (d.results[l].amount != null) best = Math.max(best, lotNum(l)); });
+    Object.keys((d && d.lots) || {}).forEach(function (l) { if (d.lots[l].sold != null) best = Math.max(best, lotNum(l)); });
+    return best;
+  }
+  function unsoldSet(d) {
+    var f = soldFrontier(d), u = {};
+    ((d && d.unsold) || []).forEach(function (l) { if (f >= 0 && lotNum(l) < f) u[l] = true; });
+    return u;
+  }
   function lotNum(l) { var n = parseInt(l, 10); return (isNaN(n) ? 0 : n) + (/[A-Za-z]$/.test(l) ? 0.01 : 0); }
   function refOf(c) { return c.low == null ? null : (c.high ? (c.low + c.high) / 2 : c.low); }
   function short(s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; }
@@ -438,7 +494,7 @@
   function progress(rows, d) {
     var lots = (d && d.lots) || {}, all = Object.keys(lots).sort(function (a, b) { return lotNum(a) - lotNum(b); });
     if (!all.length) { $("prog").innerHTML = '<p class="note">The catalog has not been collected yet.</p>'; $("progNote").textContent = ""; return; }
-    var uns = {}; (d.unsold || []).forEach(function (l) { uns[l] = 1; });
+    var uns = unsoldSet(d);
     var n = all.length, rank = {}, closed = [], nClosed = 0, last = -1;
     all.forEach(function (l, i) {
       rank[l] = i;
@@ -458,7 +514,7 @@
     }
     if (last >= 0 && last < n - 1) {
       s += '<line x1="' + (L + w * (last + 1) / n) + '" x2="' + (L + w * (last + 1) / n) + '" y1="' + (railY - 8) + '" y2="' + (railY + railH + 8) + '" stroke="var(--text)" stroke-width="1.5"/>' +
-        '<text x="' + (L + w * (last + 1) / n) + '" y="' + (railY - 12) + '" text-anchor="middle">Closing now: lot ' + esc(all[last]) + "</text>";
+        '<text x="' + Math.min(Math.max(L + w * (last + 1) / n, 150), W - 150) + '" y="' + (railY - 12) + '" text-anchor="middle">Closing now: lot ' + esc(all[last]) + "</text>";
     }
     rows.forEach(function (r) {
       if (rank[r.lot] == null) return;
@@ -470,11 +526,15 @@
     for (var k = 0; k <= 4; k++) { var ix = Math.min(n - 1, Math.round((n - 1) * k / 4)); s += '<text x="' + x(ix) + '" y="' + (railY + railH + 22) + '" text-anchor="' + (k === 0 ? "start" : k === 4 ? "end" : "middle") + '">Lot ' + esc(all[ix]) + "</text>"; }
     $("prog").innerHTML = s + "</svg>";
 
-    var note = nClosed + " of " + n + " lots in the sale have closed (" + Math.round(100 * nClosed / n) + "%).";
+    var note = nClosed.toLocaleString() + " of " + n.toLocaleString() + " lots closed (" + Math.round(100 * nClosed / n) + "%)." + (nClosed === 0 ? " The sale has not started closing yet." : "");
     var nxt = rows.filter(function (r) { return rank[r.lot] != null && !closed[rank[r.lot]]; }).sort(function (a, b) { return rank[a.lot] - rank[b.lot]; });
     var ahead = nxt.filter(function (r) { return rank[r.lot] > last; })[0] || nxt[0];
     if (nClosed === n) note += " The sale has finished closing.";
-    else if (ahead) note += " Your next lot is " + ahead.lot + (rank[ahead.lot] > last ? ", about " + (rank[ahead.lot] - last) + " lots away." : ".");
+    else if (ahead) {
+      var away = rank[ahead.lot] - last;
+      note += last < 0 ? " Your first lot is " + ahead.lot + "." :
+        " Your next lot is " + ahead.lot + (rank[ahead.lot] > last ? (away <= 1 ? ", next in line." : ", about " + away + " lots away.") : ".");
+    }
     else note += " None of your remaining lots are waiting to close.";
     /* rough pace: only lots first seen after the first check, so the opening snapshot does not distort it */
     var ts = Object.keys(d.sold_seen || {}).map(function (l) { return new Date(d.sold_seen[l]).getTime(); }).filter(function (t) { return !isNaN(t); });
@@ -578,7 +638,80 @@
     $("kpis").innerHTML = items.map(function (i) { return '<div class="kpi"><div class="v">' + i[0] + '</div><div class="l">' + i[1] + "</div></div>"; }).join("");
   }
 
+  /* ---------- per-lot chart: % of value, or $ price against $ value ---------- */
+  function niceScale(max, cnt) {
+    var raw = max / cnt, p = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10)), st = 10 * p;
+    [1, 2, 2.5, 5, 10].some(function (m) { if (m * p >= raw * 0.9999) { st = m * p; return true; } return false; });
+    var n = Math.max(1, Math.ceil(max / st - 1e-9));
+    return { step: st, top: st * n, n: n };
+  }
+  function wireTip(rows, textFn) {
+    var tip = $("tip"), el = $("chart");
+    function on(e) {
+      var t = e.target.closest ? e.target.closest(".hit") : null;
+      if (!t) { tip.style.display = "none"; return; }
+      var r = rows[+t.getAttribute("data-i")];
+      tip.innerHTML = "<b>Lot " + esc(r.lot) + "</b><br>" + esc((r.desc || "").slice(0, 70)) + "<br>" + textFn(r);
+      tip.style.display = "block"; tip.style.left = Math.max(4, Math.min(e.clientX + 12, innerWidth - 290)) + "px"; tip.style.top = e.clientY + 14 + "px";
+    }
+    el.onmousemove = on; el.onclick = on;                 /* click covers touch screens */
+    el.onmouseleave = function () { tip.style.display = "none"; };
+  }
+  document.addEventListener("click", function (e) { if (!(e.target.closest && e.target.closest("#chart"))) $("tip").style.display = "none"; });
+
   function chart(rows) {
+    var usd = state.cmode === "usd";
+    $("chartTitle").textContent = usd ? "Price against catalog value, by lot" : "Price as % of value, by lot";
+    Array.prototype.forEach.call(document.querySelectorAll("#cmodeSeg button"), function (b) {
+      var on = b.getAttribute("data-cmode") === state.cmode; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    $("chartLegend").innerHTML = '<span><span class="sw solid"></span>Sold (final price)</span><span><span class="sw hollow"></span>Open (current bid)</span>' +
+      (usd ? '<span><span class="sw ghost"></span>Catalog value (midpoint of an estimate range). A pale bar alone means no price yet.</span>'
+           : "<span>Dashed line = 100% of catalog value (midpoint of an estimate range)</span>");
+    $("chartNote").textContent = "";
+    return usd ? chartUsd(rows) : chartPct(rows);
+  }
+
+  function chartUsd(rows) {
+    var W = 900, H = 270, L = 76, R = 10, T = 12, B = 34;
+    var cur = (rows.filter(function (r) { return r.cur; })[0] || {}).cur || "";
+    var vals = [];
+    rows.forEach(function (r) { if (r.ref != null) vals.push(r.ref); if (r.amt != null) vals.push(r.amt); });
+    if (!vals.length) { $("chart").innerHTML = '<p class="note">No prices or catalog values to plot yet.</p>'; return; }
+    vals.sort(function (a, b) { return a - b; });
+    var mx = vals[vals.length - 1], p90 = vals[Math.floor(0.9 * (vals.length - 1))];
+    var clip = vals.length >= 10 && mx > p90 * 2.5;                  /* a few huge lots would flatten everything else */
+    var sc = niceScale(clip ? p90 * 1.3 : mx, 4), top = sc.top;
+    var n = rows.length, bw = (W - L - R) / n, bar = Math.max(2, Math.min(14, bw - 2));
+    var y = function (v) { return T + (H - T - B) * (1 - Math.min(v, top) / top); };
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" role="img" aria-label="Price and catalog value in dollars for each lot">';
+    for (var g = 0; g <= sc.n; g++) {
+      var gv = g * sc.step;
+      s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(gv) + '" y2="' + y(gv) + '" stroke="var(--grid)"/>' +
+        '<text x="' + (L - 6) + '" y="' + (y(gv) + 4) + '" text-anchor="end">' + mshort(gv, cur) + "</text>";
+    }
+    var every = Math.ceil(n / 12), nclip = 0;
+    rows.forEach(function (r, i) {
+      var cx = L + bw * i + bw / 2, x = cx - bar / 2;
+      if (i % every === 0) s += '<text x="' + cx + '" y="' + (H - 16) + '" text-anchor="middle">' + esc(r.lot) + "</text>";
+      if (r.ref != null) s += '<rect x="' + x + '" y="' + y(r.ref) + '" width="' + bar + '" height="' + Math.max(y(0) - y(r.ref), 1) + '" rx="2" fill="var(--series)" fill-opacity=".25"/>';
+      if (r.amt != null) {
+        var f = r.state === "sold" ? 'fill="var(--series)"' : 'fill="none" stroke="var(--series)" stroke-width="2"';
+        s += '<rect x="' + x + '" y="' + y(r.amt) + '" width="' + bar + '" height="' + Math.max(y(0) - y(r.amt), 1) + '" rx="2" ' + f + "/>";
+      }
+      if (Math.max(r.ref || 0, r.amt || 0) > top) { nclip++; s += '<text x="' + cx + '" y="' + (T - 1) + '" text-anchor="middle">▲</text>'; }
+      s += '<rect class="hit" data-i="' + i + '" x="' + (cx - bw / 2) + '" y="' + T + '" width="' + bw + '" height="' + (H - T - B) + '" fill="transparent"/>';
+    });
+    s += '<text x="' + (L + (W - L - R) / 2) + '" y="' + (H - 2) + '" text-anchor="middle">Lot number</text></svg>';
+    $("chart").innerHTML = s;
+    if (nclip) $("chartNote").textContent = "The vertical scale stops at " + money(top, cur) + " so a few large lots do not flatten the rest. ▲ marks the " + nclip + " lot" + (nclip === 1 ? "" : "s") + " that run off the top; hover or tap a bar for its real numbers.";
+    wireTip(rows, function (r) {
+      if (r.amt != null) return (r.state === "sold" ? "Final " : "Bid ") + money(r.amt, r.cur) + (r.ref != null ? " against value " + money(r.ref, r.cur) + " (" + pct(r.ratio) + ")" : " (no catalog value)");
+      return r.ref != null ? "Value " + money(r.ref, r.cur) + " · " + esc(r.verdict) : esc(r.verdict);
+    });
+  }
+
+  function chartPct(rows) {
     var W = 900, H = 270, L = 44, R = 10, T = 12, B = 34, cap = 3;
     var pts = rows.filter(function (r) { return r.ratio != null; });
     if (!pts.length) { $("chart").innerHTML = '<p class="note">No prices to plot yet.</p>'; return; }
@@ -603,17 +736,106 @@
     });
     s += '<text x="' + (L + (W - L - R) / 2) + '" y="' + (H - 2) + '" text-anchor="middle">Lot number</text></svg>';
     $("chart").innerHTML = s;
-    var tip = $("tip");
-    $("chart").onmousemove = function (e) {
-      var t = e.target.closest ? e.target.closest(".hit") : null;
-      if (!t) { tip.style.display = "none"; return; }
-      var r = rows[+t.getAttribute("data-i")];
-      tip.innerHTML = "<b>Lot " + esc(r.lot) + "</b><br>" + esc((r.desc || "").slice(0, 70)) + "<br>" +
-        (r.amt != null ? (r.state === "sold" ? "Final " : "Bid ") + money(r.amt, r.cur) + " = " + pct(r.ratio) + " of " + money(r.ref, r.cur) : esc(r.verdict));
-      tip.style.display = "block"; tip.style.left = Math.min(e.clientX + 12, innerWidth - 290) + "px"; tip.style.top = e.clientY + 14 + "px";
-    };
-    $("chart").onmouseleave = function () { tip.style.display = "none"; };
+    wireTip(rows, function (r) {
+      return r.amt != null ? (r.state === "sold" ? "Final " : "Bid ") + money(r.amt, r.cur) + " = " + pct(r.ratio) + " of " + money(r.ref, r.cur) : esc(r.verdict);
+    });
   }
+
+  /* ---------- what kinds of lots did well (keyword groups; approximate) ---------- */
+  function groupStats(rows, keyFn, labels) {
+    var g = labels.map(function (l) { return { label: l, n: 0, sold: 0, unsold: 0, sref: 0, f: 0, v: 0 }; });
+    rows.forEach(function (r) {
+      var k = keyFn(r), o = k == null ? null : g[k];
+      if (!o) return;
+      o.n++;
+      if (r.state === "sold") { o.sold++; if (r.ref != null) { o.sref++; o.f += r.final; o.v += r.ref; } }
+      else if (r.state === "unsold") o.unsold++;
+    });
+    return g;
+  }
+  function groupChart(el, all, rate) {
+    var groups = all.filter(function (o) { return o.n > 0; });
+    if (!groups.length) { el.innerHTML = '<p class="note">Nothing to group yet.</p>'; return; }
+    var W = 420, LBL = 132, RV = 58, aw = W - LBL - RV - 6, cap = 2, rh = rate ? 52 : 40, H = groups.length * rh + 22;
+    var X = function (v) { return LBL + aw * Math.min(v, cap) / cap; };
+    var any = groups.some(function (o) { return o.v > 0; });
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" role="img" aria-label="Sold price as percent of value by group, with lot counts">';
+    groups.forEach(function (o, i) {
+      var y = 2 + i * rh, pv = o.v > 0 ? o.f / o.v : null, few = o.sref < 3, closed = o.sold + o.unsold;
+      s += '<text x="' + (LBL - 8) + '" y="' + (y + 15) + '" text-anchor="end">' + esc(o.label) + "<title>" + esc(o.label) + ": " + o.n + " lots, " + o.sold + " sold, " + o.unsold + " unsold</title></text>";
+      if (pv != null) {
+        s += '<rect x="' + LBL + '" y="' + (y + 4) + '" width="' + Math.max(2, X(pv) - LBL) + '" height="14" rx="2" fill="var(--series)"' + (few ? ' fill-opacity=".4"' : "") + "/>" +
+          '<text x="' + (W - 2) + '" y="' + (y + 15) + '" text-anchor="end" style="fill:var(--text);font-weight:600">' + pct(pv) + (pv > cap ? " ▲" : "") + "</text>";
+      } else s += '<text x="' + (W - 2) + '" y="' + (y + 15) + '" text-anchor="end">–</text>';
+      var tiny = "n=" + o.n + " · " + o.sold + " sold" + (o.unsold ? " · " + o.unsold + " unsold" : "") + (pv != null && few ? " · too few to judge" : (pv == null && o.sold === 0 ? " · none sold yet" : ""));
+      if (rate) {
+        var ur = closed ? o.unsold / closed : null;
+        if (ur != null) s += '<rect x="' + LBL + '" y="' + (y + 22) + '" width="' + Math.max(ur > 0 ? 2 : 0, aw * ur / cap) + '" height="6" rx="2" fill="var(--muted)"/>';
+        s += '<text class="tiny" x="' + (W - 2) + '" y="' + (y + 29) + '" text-anchor="end">' + (ur == null ? "–" : pct(ur) + " unsold") + "</text>";
+        s += '<text class="tiny" x="' + LBL + '" y="' + (y + 43) + '">' + tiny + "</text>";
+      } else s += '<text class="tiny" x="' + LBL + '" y="' + (y + 31) + '">' + tiny + "</text>";
+    });
+    if (any) {      /* the 100% reference is drawn only through each bar, so it never crosses the small print under it */
+      groups.forEach(function (o, i) { var y = 2 + i * rh; s += '<line x1="' + X(1) + '" x2="' + X(1) + '" y1="' + (y + 1) + '" y2="' + (y + (rate ? 31 : 21)) + '" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="3 3"/>'; });
+      s += '<text x="' + X(1) + '" y="' + (H - 6) + '" text-anchor="middle">Dashed tick = 100% of value</text>';
+    }
+    el.innerHTML = s + "</svg>" + (rate ? '<p class="note" style="margin:2px 0 0">Blue bar: price as % of value. Grey bar: share of closed lots that went unsold.</p>' : "");
+  }
+  function stampCharts(rows) {
+    var card = $("stampsCard");
+    if (!StampParser.classify) { card.classList.add("hide"); return; }          /* parser.js from an older copy */
+    card.classList.remove("hide");
+    var cur = (rows.filter(function (r) { return r.cur; })[0] || {}).cur || "";
+    var C = function (r) { return r.cls || {}; };
+    groupChart($("gGrade"), groupStats(rows, function (r) { return C(r).gradeIdx; }, StampParser.GRADE_ORDER));
+    groupChart($("gCert"), groupStats(rows, function (r) { return C(r).cert ? 0 : 1; }, ["Certified", "No cert found"]));
+    groupChart($("gKind"), groupStats(rows, function (r) { return C(r).kindIdx; }, StampParser.KIND_ORDER));
+    groupChart($("gBand"), groupStats(rows, function (r) { return StampParser.valueBand(r.ref); }, ["Under " + cur + "100", cur + "100 to 500", "Over " + cur + "500"]), true);
+  }
+
+  /* ---------- photo preview on the lot number (loaded only when asked for) ---------- */
+  var pop = $("imgpop"), imgLot = null, imgTimer = null;
+  function imgUrl(lot) {
+    var m = (state.data && state.data.meta) || {};
+    return m.firm && m.sale ? BASE + "/" + encodeURIComponent(String(m.firm).trim()) + "/" + encodeURIComponent(m.sale) + "/" + encodeURIComponent(lot) + ".jpg" : "";
+  }
+  function placePop(a) {
+    var r = a.getBoundingClientRect(), pw = pop.offsetWidth, ph = pop.offsetHeight, vw = innerWidth, vh = innerHeight;
+    var x = r.right + 10; if (x + pw > vw - 8) x = Math.max(8, r.left - pw - 10); if (x + pw > vw - 8) x = Math.max(8, vw - pw - 8);
+    var yy = Math.min(Math.max(8, r.top + r.height / 2 - ph / 2), Math.max(8, vh - ph - 8));
+    pop.style.left = x + "px"; pop.style.top = yy + "px";
+  }
+  function hideImg() { clearTimeout(imgTimer); imgLot = null; pop.style.display = "none"; }
+  function showImg(a) {
+    var lot = a.getAttribute("data-lot"), url = imgUrl(lot);
+    if (!url) return;
+    imgLot = lot; pop.innerHTML = '<div class="ipcap">Lot ' + esc(lot) + " · loading photo…</div>"; pop.style.display = "block"; placePop(a);
+    var im = new Image();
+    im.referrerPolicy = "no-referrer";           /* in case SAN refuses photos requested from another site */
+    im.alt = "Photo of lot " + lot;
+    im.onload = function () { if (imgLot !== lot) return; pop.innerHTML = ""; pop.appendChild(im); var c = document.createElement("div"); c.className = "ipcap"; c.textContent = "Lot " + lot; pop.appendChild(c); placePop(a); };
+    im.onerror = function () { if (imgLot !== lot) return; pop.innerHTML = '<div class="ipcap">Lot ' + esc(lot) + " · no image</div>"; placePop(a); };
+    im.src = url;                                 /* the request starts here, never earlier */
+  }
+  /* A finger and a mouse behave differently: a mouse previews on hover; a finger previews on the first tap and
+     opens SAN on the second. We go by the pointer that was actually used, not by a guess about the device. */
+  var tblEl = $("tbl"), lastPtr = "mouse";
+  function lotLink(e) { return e.target.closest ? e.target.closest("a.lotlink") : null; }
+  ["pointerover", "pointerdown"].forEach(function (t) { tblEl.addEventListener(t, function (e) { lastPtr = e.pointerType || "mouse"; }); });
+  tblEl.addEventListener("mouseover", function (e) { var a = lotLink(e); if (!a || lastPtr === "touch" || a.getAttribute("data-lot") === imgLot) return; clearTimeout(imgTimer); imgTimer = setTimeout(function () { showImg(a); }, 180); });
+  tblEl.addEventListener("mouseout", function (e) { var a = lotLink(e); if (a && lastPtr !== "touch" && !a.contains(e.relatedTarget)) hideImg(); });
+  /* keyboard focus only: a tap or click also moves focus onto the link, and that must not count as "show the photo" */
+  function keyboardFocus(a) { try { return a.matches(":focus-visible"); } catch (err) { return true; } }
+  tblEl.addEventListener("focusin", function (e) { var a = lotLink(e); if (a && keyboardFocus(a)) showImg(a); });
+  tblEl.addEventListener("focusout", function (e) { if (lotLink(e)) hideImg(); });
+  tblEl.addEventListener("click", function (e) {
+    var a = lotLink(e); if (!a || lastPtr !== "touch") return;
+    clearTimeout(imgTimer);
+    if (imgLot !== a.getAttribute("data-lot")) { e.preventDefault(); showImg(a); } else hideImg();   /* first tap = photo, second tap = open SAN */
+  });
+  document.addEventListener("click", function (e) { if (imgLot && !lotLink(e)) hideImg(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") hideImg(); });
+  window.addEventListener("scroll", hideImg, true);
 
   var COLS = [
     ["lot", "Lot", false, function (r) { return parseInt(r.lot, 10) + (r.lot.length > String(parseInt(r.lot, 10)).length ? 0.01 : 0); }],
@@ -634,6 +856,7 @@
     });
   }
   function table(rows, meta) {
+    hideImg();
     var col = COLS.filter(function (c) { return c[0] === state.sort.k; })[0] || COLS[0];
     var list = filtered(rows).sort(function (a, b) {
       var x = col[3](a), y = col[3](b);
@@ -646,7 +869,7 @@
     list.forEach(function (r) {
       var link = r.page && meta.firm ? BASE + "/" + meta.firm + "/" + meta.firm.toLowerCase() + meta.sale + r.page + ".cfm#Lot" + encodeURIComponent(r.lot) : "";
       var vtxt = r.ref == null ? (r.valNote ? '<span class="tag" title="Catalog value is in other terms; no percentage shown">' + esc(r.valNote) + "</span>" : "–") : (r.high ? money(r.low, r.cur) + "–" + money(r.high) + ' <span class="tag">' + (r.kind === "EST" ? "est" : "apx CV") + "</span>" : money(r.low, r.cur) + ' <span class="tag">CV</span>');
-      h += "<tr><td>" + (link ? '<a href="' + esc(link) + '" target="_blank" rel="noopener">' + esc(r.lot) + "</a>" : esc(r.lot)) + "</td>" +
+      h += "<tr><td>" + (link ? '<a class="lotlink" data-lot="' + esc(r.lot) + '" href="' + esc(link) + '" target="_blank" rel="noopener">' + esc(r.lot) + "</a>" : esc(r.lot)) + "</td>" +
         '<td class="desc" title="' + esc(r.desc) + '">' + esc((r.desc || "").slice(0, 110)) + (r.basisNote ? ' <span class="tag" title="' + esc(r.basisNote) + '">ⓘ basis noted</span>' : "") + (r.catMismatch ? ' <span title="Your file and the live catalog disagree on the value">⚠</span>' : "") + "</td>" +
         '<td class="num">' + vtxt + "</td>" +
         '<td class="num">' + (r.bid != null ? money(r.bid, r.cur) : "–") + (r.moved ? ' <span class="tag" title="Bid has changed since tracking began">↑moved</span>' : "") + "</td>" +

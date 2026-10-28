@@ -86,5 +86,57 @@
     return { lots: lots, declared: null, warnings: warnings };
   }
 
-  return { linesFromItems: linesFromItems, parseLines: parseLines, parseText: parseText };
+  /* ---------- keyword-based reading of what a lot IS (approximate, by design) ----------
+     Inputs are the SAN "Symbol" cell (e.g. "OVF-XF", "**", "*O"), the consignor's own description
+     (e.g. "1a O VF-XF 5c gray brown ...") and SAN's full description. Everything here is a guess from
+     keywords, so the dashboard labels it approximate and shows how many lots sit in each group. */
+  var GRADE_TOK = "XF-SUP|XF-S|SUP|GEM|VF-XF|F-VF|AVG-F|VG-F|XF|VF|AVG|VG|F|G";
+  /* In SAN's Symbol cell the finish and grade are glued together ("OVF-XF"); in prose they are spaced ("O VF-XF"). */
+  var GRADE_IN_SYM = new RegExp("^(?:\\*\\*|\\(\\*\\)|\\*|O|P)+\\s*(" + GRADE_TOK + ")\\+?(?![A-Za-z])");
+  var GRADE_IN_TEXT = new RegExp("(?:^|[\\s(,])(?:\\*\\*|\\(\\*\\)|\\*|O|P)\\s+(" + GRADE_TOK + ")\\+?(?![A-Za-z])");
+  var GRADE_ALONE = new RegExp("(?:^|[\\s(,])(XF-SUP|XF-S|SUP|GEM|VF-XF|F-VF|VF|XF)\\+?(?![A-Za-z])");
+  var GRADE_ORDER = ["XF-Superb / Superb", "XF", "VF-XF", "VF", "F-VF", "Fine or below", "No grade shown"];
+  var GRADE_MAP = { "SUP": 0, "GEM": 0, "XF-SUP": 0, "XF-S": 0, "XF": 1, "VF-XF": 2, "VF": 3, "F-VF": 4, "F": 5, "AVG-F": 5, "AVG": 5, "VG-F": 5, "VG": 5, "G": 5 };
+  var CERT_RE = /\b(PSE|PSAG|PSA|PF|Weiss|certs?|certificates?|certified|graded|slabbed|expertized|expertised)\b/i;
+  var COVER_RE = /\b(covers?|FDC|FFC|postal history|stationery|postcards?|envelopes?|entires?|wrappers?|folded letters?|stampless|postmarks?)\b/i;
+  var MINT_MARK = /(?:^|[\s(,])(?:\*\*|\(\*\)|\*)(?=$|[\s,/)A-Z])/;
+  var USED_IN_SYM = /^(?:\*\*|\(\*\)|\*)*O/;            /* "O", "OVF-XF", "*O" */
+  var USED_IN_TEXT = /(?:^|[\s/(,])O(?=$|[\s/,])/;           /* a lone "O", as in "1a O VF-XF" */
+  var MINT_WORDS = /\b(mint|NH|MNH|never hinged|unused|hinged|OG|original gum)\b/i;
+  var USED_WORDS = /\b(used|cancel|cancelled|cancellation|cds|postmarked?)\b/i;
+  var KIND_ORDER = ["Mint", "Used", "Cover / postal history", "Unclear or mixed"];
+
+  function classify(o) {
+    var sym = String(o.sym || "").replace(/\s+/g, " ").trim();
+    var desc = String(o.text || "").replace(/\s+/g, " ").trim();
+    /* The finish and grade sit right after the Scott number, so only look at the start of the text.
+       (Searching further would pick up words like "PF Cert" or "MAN OF" as a grade.) */
+    var head = (sym + " " + desc.slice(0, 40));
+    var g = sym.match(GRADE_IN_SYM) || desc.slice(0, 28).match(GRADE_IN_TEXT) || (sym + " " + desc.slice(0, 60)).match(GRADE_ALONE);
+    var gi = g ? GRADE_MAP[g[1]] : 6;
+    /* mint / used / cover */
+    var kind;
+    /* Not the catalog page heading: SAN shows one heading per page, so it often belongs to the previous group of lots. */
+    if (COVER_RE.test(desc)) kind = 2;
+    else {
+      var hm = MINT_MARK.test(head), hu = USED_IN_SYM.test(sym) || USED_IN_TEXT.test(desc.slice(0, 40));
+      if (hm && hu) kind = 3;
+      else if (hm) kind = 0;
+      else if (hu) kind = 1;
+      else {
+        var wm = MINT_WORDS.test(desc), wu = USED_WORDS.test(desc);
+        kind = wm && wu ? 3 : wm ? 0 : wu ? 1 : 3;
+      }
+    }
+    return { grade: GRADE_ORDER[gi], gradeIdx: gi, kind: KIND_ORDER[kind], kindIdx: kind, cert: CERT_RE.test(sym + " " + desc) };
+  }
+
+  function valueBand(ref) {
+    if (ref == null) return null;
+    return ref < 100 ? 0 : ref <= 500 ? 1 : 2;
+  }
+
+  return { linesFromItems: linesFromItems, parseLines: parseLines, parseText: parseText,
+           classify: classify, valueBand: valueBand, GRADE_ORDER: GRADE_ORDER, KIND_ORDER: KIND_ORDER,
+           BAND_LABELS: ["Under 100", "100 to 500", "Over 500"] };
 });
