@@ -12,7 +12,7 @@
   else root.StampParser = factory();
 })(typeof self !== "undefined" ? self : this, function () {
   var LOT_LINE = /^(\d{1,4}[A-Za-z]?)\s+(.+?)\s+(\d[\d,]*)(?:\s*-\s*(\d[\d,]*))?\s+(APX CV|CV|EST)\s*$/;
-  var SIMPLE_LINE = /^(\d{1,4}[A-Za-z]?)[\s,;:=\t]+(\d[\d,]*)(?:\s*-\s*(\d[\d,]*))?(?:\s*(APX CV|CV|EST))?\s*$/i;
+  var SIMPLE_LINE = /^(\d{1,4}[A-Za-z]?)([\s,;:=\t]+)(\d[\d,]*)(?:\s*-\s*(\d[\d,]*))?(?:\s*(APX CV|CV|EST))?\s*$/i;
   var BARE_LOTS = /^[\d\s,;A-Za-z]+$/;
   var COUNT_LINE = /Number of Lots in Consignment\s+(\d+)/i;
   var BASIS_NOTE = /\((?:CV|Scott|SMQ)[^)]*\)/i;
@@ -71,9 +71,10 @@
     lines.forEach(function (raw) {
       var line = raw.trim();
       var m = line.match(SIMPLE_LINE);
-      if (m && !seen[m[1]]) {
+      /* "241, 244" is two lot numbers, not lot 241 worth 244. A value needs a CV/EST label or a : = tab separator. */
+      if (m && !seen[m[1]] && (m[5] || /[:=\t]/.test(m[2]))) {
         seen[m[1]] = true;
-        lots.push({ lot: m[1], desc: "", low: toNum(m[2]), high: toNum(m[3]), kind: (m[4] || "CV").toUpperCase(), basisNote: "" });
+        lots.push({ lot: m[1], desc: "", low: toNum(m[3]), high: toNum(m[4]), kind: (m[5] || "CV").toUpperCase(), basisNote: "" });
       }
     });
     if (lots.length) return { lots: lots, declared: null, warnings: warnings };

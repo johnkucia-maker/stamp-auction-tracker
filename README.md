@@ -82,7 +82,7 @@ The test sale **RM-592** (R. Maresch, ends Oct 29) is included on purpose. It ha
 
 ## Refreshing by hand
 
-The job already runs every 15 minutes. To force a refresh, scroll to the bottom of the page and click **Refresh now**. This opens the repository's *Update sale data* page on GitHub. Press **Run workflow** (and the green button inside the box), wait a minute or two, then reload the page.
+The job already runs every 15 minutes. The two numbers in `sales.json` (`catalog_refresh_minutes` before the sale, `..._live` during it) say how often the full catalog is re-read; they are honoured to within one 15-minute run, so use multiples of 15 (15, 30, 45, 60). Results are read on every run. To force a refresh, scroll to the bottom of the page and click **Refresh now**. This opens the repository's *Update sale data* page on GitHub. Press **Run workflow** (and the green button inside the box), wait a minute or two, then reload the page.
 
 This only works for the person who owns the repository (you must be signed in to GitHub with access to it). Everyone else lands on a GitHub page that will not let them run it, which does no harm. The link works out the repository from the page address (`https://NAME.github.io/REPO/`). If your page is on another address, add `"repo": "https://github.com/NAME/REPO"` at the top level of `sales.json` (next to `"sales"`).
 
