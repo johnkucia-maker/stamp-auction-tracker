@@ -65,6 +65,7 @@ check("currency US$", lots["241"]["cur"] == "US$")
 check("estimate range", lots["244"]["kind"] == "EST" and lots["244"]["low"] == 200 and lots["244"]["high"] == 300)
 check("thousands comma", lots["243"]["low"] == 6000 and lots["243"]["bid"] == 300)
 check("Maresch 'Cat. Val.' + 'Currently C$ 2,300'", lots["511"]["low"] == 11280 and lots["511"]["bid"] == 2300 and lots["511"]["cur"] == "C$")
+check("raw value-cell text is not stored (keeps the data file small)", "cell" not in lots["241"])
 check("lot with no bid has no bid key", "bid" not in lots["600"])
 check("description cleaned", "(Image)" not in lots["241"]["desc"] and "Get Market" not in lots["241"]["desc"])
 check("condition symbol saved (SAN 'Symbol' column)", lots["241"]["sym"] == "OVF-XF" and lots["244"]["sym"] == "OVF" and lots["243"]["sym"] == "OF-VF")
@@ -204,15 +205,42 @@ f.get, f.post_realizations, f.make_session, f.now_utc = _fg3, _fp3, (lambda: _NS
 f.run_sale({"key": "T-1", "firm": "TS", "sale": "999", "catalog_refresh_minutes": 15})
 check("catalog timing: 14m10s since last fetch counts as due for a 15 min setting", _json.loads((_d3 / "T-1.json").read_text())["meta"].get("lot_count") == 3)
 
+# results are merged, never replaced: a short page from SAN must not erase lots already collected
+_d4 = Path(_tmp.mkdtemp()); f.DATA, f.RAW = _d4, _d4 / "raw"
+(_d4 / "T-1.json").write_text(_json.dumps({"meta": {}, "lots": {}, "results": {"7": {"amount": 9, "cur": "US$"}, "60": {"amount": 1, "cur": "US$"}}, "unsold": [], "history": {}}))
+_fg4, _fp4, _ = _fake_net(60)
+f.get, f.post_realizations, f.make_session, f.now_utc = _fg4, _fp4, (lambda: _NS(cookies={})), f.now_utc
+f.run_sale({"key": "T-1", "firm": "TS", "sale": "999"}, force=True)
+_o4 = _json.loads((_d4 / "T-1.json").read_text())
+check("results merge: earlier lot kept when the new page lacks it", _o4["results"].get("7", {}).get("amount") == 9)
+check("results merge: a lot on the new page is updated", _o4["results"]["60"]["amount"] == 55)
+
+# after sale_end the catalog falls back to the slower rate (30 min since last read: due live, not due after the sale)
+def _cadence(now, cfg_extra):
+    d = Path(_tmp.mkdtemp()); f.DATA, f.RAW = d, d / "raw"
+    (d / "T-1.json").write_text(_json.dumps({"meta": {"catalog_fetched_at": f.iso(now - _dt.timedelta(minutes=30))}, "lots": {}, "results": {}, "unsold": [], "history": {}}))
+    fg, fp, _ = _fake_net(None)
+    f.get, f.post_realizations, f.make_session, f.now_utc = fg, fp, (lambda: _NS(cookies={})), (lambda: now)
+    cfg = {"key": "T-1", "firm": "TS", "sale": "999", "results_from": "2026-11-10T14:30:00Z", "sale_end": "2026-11-13T00:00:00Z",
+           "catalog_refresh_minutes": 60, "catalog_refresh_minutes_live": 30}
+    cfg.update(cfg_extra)
+    f.run_sale(cfg)
+    return _json.loads((d / "T-1.json").read_text())["meta"].get("lot_count") == 3
+check("cadence: during the sale a 30 min old catalog is re-read", _cadence(_dt.datetime(2026, 11, 11, 16, 0, tzinfo=_dt.timezone.utc), {}))
+check("cadence: after sale_end a 30 min old catalog is NOT re-read (hourly)", not _cadence(_dt.datetime(2026, 11, 19, 16, 0, tzinfo=_dt.timezone.utc), {}))
+check("cadence: without sale_end the live rate continues (old behaviour)", _cadence(_dt.datetime(2026, 11, 19, 16, 0, tzinfo=_dt.timezone.utc), {"sale_end": None}))
+
 # parser.js: pasted lot lists (needs node; skipped quietly if absent)
 import shutil, subprocess
 if shutil.which("node"):
     _js = ("const P=require(process.argv[1]);const o=t=>P.parseText(t).lots.map(l=>l.lot+':'+l.low).join(',');"
-           "console.log(JSON.stringify([o('241, 244\\n246, 247'),o('241 244\\n246 247'),o('241 565 CV\\n244 200-300 EST'),o('241: 565\\n244 = 300')]))")
+           "const L=P.parseLines(['239 1 O VF 5c Franklin 425 CV 525','244 9 O VF 1c blue 200 - 300 EST UNSOLD','316 296 ** XF NH graded XF-S 95 CV is']).lots;"
+           "console.log(JSON.stringify([o('241, 244\\n246, 247'),o('241 244\\n246 247'),o('241 565 CV\\n244 200-300 EST'),o('241: 565\\n244 = 300'),L.map(l=>l.lot+':'+l.low+':'+l.real+':'+l.realCode).join(',')]))")
     _r = subprocess.run(["node", "-e", _js, str(Path(__file__).resolve().parent.parent / "parser.js")], capture_output=True, text=True)
     _v = _json.loads(_r.stdout) if _r.returncode == 0 else None
     check("parser.js: 'lot, lot' lines are lot numbers, not lot + value", _v and _v[0] == "241:null,244:null,246:null,247:null" and _v[1] == _v[0])
     check("parser.js: labelled or ':' '=' values are still read", _v and _v[2] == "241:565,244:200" and _v[3] == "241:565,244:300")
+    check("parser.js: a filled-in Real column is read, description text after CV is not", _v and _v[4] == "239:425:525:,244:200:null:UNSOLD")
 
 if check.failed:
     sys.exit(1)

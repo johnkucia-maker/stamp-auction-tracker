@@ -98,7 +98,7 @@ def parse_catalog_page(html: str, page_no: int):
         desc = re.sub(r"\s+", " ", desc_td.get_text(" ", strip=True))
         desc = re.split(r"\(Image\)|Get Market Data", desc)[0].strip()
         cell = re.sub(r"\s+", " ", val_td.get_text(" ", strip=True))
-        rec = {"desc": desc, "page": page_no, "section": section, "cell": cell}
+        rec = {"desc": desc, "page": page_no, "section": section}
         # Second cell = SAN's "Symbol" column (condition, e.g. "OVF-XF", "**", "*O"). Often empty on covers.
         if len(tds) >= 4:
             sym = re.sub(r"\s+", " ", tds[1].get_text(" ", strip=True))
@@ -368,7 +368,9 @@ def run_sale(cfg, force=False, debug=False):
             print(f"[{key}] results title: {parsed['title']!r}")
             if parsed["handshake_ok"]:
                 print(f"[{key}] HANDSHAKE_OK - SAN returned the right sale ({len(parsed['results'])} results)")
-                out["results"] = parsed["results"]
+                # Merge rather than replace: a short or partial page from SAN must never erase results
+                # already collected. A lot whose entry changes (e.g. to "unsold") is still updated.
+                out["results"] = {**out.get("results", {}), **parsed["results"]}
                 meta["results_fetched_at"] = iso(t)
                 unsold_href = parsed["unsold_href"]
             else:
@@ -383,8 +385,10 @@ def run_sale(cfg, force=False, debug=False):
             meta["warnings"].append(f"Results step failed ({e}); kept the previous results.")
             ok = False
 
-    # 3. Catalog pages (bids). Only if due.
-    live = results_from and t >= results_from
+    # 3. Catalog pages (bids). Only if due. "Live" runs from results_from to sale_end (if given); after the
+    # main sale the slower pre-sale rate applies again, so a week of post-sale tracking stays light on SAN.
+    sale_end = parse_iso(cfg.get("sale_end"))
+    live = bool(results_from and t >= results_from and (not sale_end or t < sale_end))
     every = cfg.get("catalog_refresh_minutes_live" if live else "catalog_refresh_minutes", 60)
     last = parse_iso(meta_prev.get("catalog_fetched_at"))
     # The cron fires every ~15 min with a few minutes of jitter, so allow 3 min of slack; otherwise a
