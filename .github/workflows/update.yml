@@ -2,7 +2,8 @@ name: Update sale data
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    # Every 15 minutes, but not on the hour: GitHub delays (and sometimes drops) runs at :00, its busiest time.
+    - cron: "4,19,34,49 * * * *"
   workflow_dispatch:
     inputs:
       force:
