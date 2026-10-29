@@ -11,7 +11,9 @@
   if (typeof module === "object" && module.exports) module.exports = factory();
   else root.StampParser = factory();
 })(typeof self !== "undefined" ? self : this, function () {
-  var LOT_LINE = /^(\d{1,4}[A-Za-z]?)\s+(.+?)\s+(\d[\d,]*)(?:\s*-\s*(\d[\d,]*))?\s+(APX CV|CV|EST)\s*$/;
+  /* After the value the line may carry the "Real" (realized) column once the firm fills it in after the sale:
+     an optional price and/or a short code (e.g. "525", "$525.00", "UNSOLD"). Kept strict so description text never matches. */
+  var LOT_LINE = /^(\d{1,4}[A-Za-z]?)\s+(.+?)\s+(\d[\d,]*)(?:\s*-\s*(\d[\d,]*))?\s+(APX CV|CV|EST)(?:\s+\$?(\d[\d,]*(?:\.\d{1,2})?))?(?:\s+([A-Z]{1,10}))?\s*$/;
   var SIMPLE_LINE = /^(\d{1,4}[A-Za-z]?)([\s,;:=\t]+)(\d[\d,]*)(?:\s*-\s*(\d[\d,]*))?(?:\s*(APX CV|CV|EST))?\s*$/i;
   var BARE_LOTS = /^[\d\s,;A-Za-z]+$/;
   var COUNT_LINE = /Number of Lots in Consignment\s+(\d+)/i;
@@ -53,7 +55,8 @@
       var bn = m[2].match(BASIS_NOTE);
       lots.push({
         lot: lot, desc: m[2], low: toNum(m[3]), high: toNum(m[4]),
-        kind: m[5].toUpperCase(), basisNote: bn ? bn[0] : ""
+        kind: m[5].toUpperCase(), basisNote: bn ? bn[0] : "",
+        real: m[6] ? toNum(m[6]) : null, realCode: m[7] || ""
       });
     });
     if (declared != null && declared !== lots.length) {

@@ -68,14 +68,16 @@ The test sale **RM-592** (R. Maresch, ends Oct 29) is included on purpose. It ha
 
 ## Running the sale
 
-- The job runs every 15 minutes by itself. Nothing for you to do.
+- The job runs every 15 minutes by itself (at :04, :19, :34 and :49, because GitHub delays jobs set for the top of the hour). Nothing for you to do.
+- The page trails the live sale by roughly 10 to 30 minutes (the job's schedule, GitHub's delays, and the page's own 5-minute check). For the lot that is up right now, watch SAN itself.
+- For Sale 367 tracking continues to November 22 so it also catches Dutch Country's Unsold Sale (November 18-20). After the main sale (`sale_end`) the catalog is re-read only hourly.
 - Outside a sale's dates (set in `sales.json`) the job skips that sale, so it makes no requests to SAN.
 - Before the sale you see current bids. As lots close you see final prices and a result such as "Under CV".
 - "Bid has moved" shows lots whose bid changed since tracking began. Until a bid moves, the number you see may be just the opening bid.
 
 ## Reading the page
 
-- **Where is the auction?** Shows how far the sale has got. Before the sale it reads "0 of N lots closed (0%)" and every one of your lots is a hollow dot. As lots close, the closed stretch is shaded and a "Closing now" marker appears.
+- **Where is the auction?** Shows how far the sale has got. Before the sale it reads "0 of N lots closed (0%)" and every one of your lots is a hollow dot. As lots close, the closed stretch is shaded and a "Closing now" marker appears. Underneath, the page gives the current pace ("about 100 an hour") and, at that pace, roughly when your next lot comes up. The pace counts only the last hour or so of the current session, so the overnight break does not distort it. If nothing new has closed for 45 minutes it says the sale is probably between sessions instead.
 - **Price chart, two views.** The switch above the chart flips between **% of value** (the dashed line is 100%) and **$ vs value** (a pale bar is the catalog value, a solid bar is the final price, a hollow bar is a bid still open; one dollar scale). In the $ view the scale is capped when a few huge lots would flatten everything else; a ▲ marks the bars that run off the top. Hover a bar for its numbers (the popup leads with % in the % view and dollars in the $ view). **Click a bar to pin that lot**: its details stay in the panel under the chart and the bar gets a shaded band and a ▼; hovering other bars still shows their popups. Click the same bar again, press Unpin, or press Escape to clear it. On a phone, tap a bar to pin it. With the keyboard, Tab to the chart, use the arrow keys to move between lots, and press Enter to pin. The page remembers which view you chose.
 - **Download CSV.** Saves the rows currently shown in the table, so the filter and search apply (a filtered file is named `...-filtered.csv`). It opens in Excel with the symbols intact, has a currency column, and text that starts with = + - or @ is prefixed with an apostrophe so a spreadsheet never runs it as a formula.
 - **Photo of a lot.** Hover over a lot number in the table (on a phone, tap it once) to see its photo from SAN. Tap or click again to open the lot on SAN. Photos are fetched only when you ask for one. If SAN has no photo, or refuses to show it on another site, you see "no image".
@@ -83,7 +85,7 @@ The test sale **RM-592** (R. Maresch, ends Oct 29) is included on purpose. It ha
 
 ## Refreshing by hand
 
-The job already runs every 15 minutes. The two numbers in `sales.json` (`catalog_refresh_minutes` before the sale, `..._live` during it) say how often the full catalog is re-read; they are honoured to within one 15-minute run, so use multiples of 15 (15, 30, 45, 60). Results are read on every run. To force a refresh, scroll to the bottom of the page and click **Refresh now**. This opens the repository's *Update sale data* page on GitHub. Press **Run workflow** (and the green button inside the box), wait a minute or two, then reload the page.
+The job already runs every 15 minutes. The two numbers in `sales.json` (`catalog_refresh_minutes` before the sale, `..._live` during it) say how often the full catalog is re-read; they are honoured to within one 15-minute run, so use multiples of 15 (15, 30, 45, 60). Results are read on every run. An optional `sale_end` time marks the end of the main sale: after it, the slower `catalog_refresh_minutes` applies again (useful when tracking continues into a post-sale or unsold sale). To force a refresh, scroll to the bottom of the page and click **Refresh now**. This opens the repository's *Update sale data* page on GitHub. Press **Run workflow** (and the green button inside the box), wait a minute or two, then reload the page.
 
 This only works for the person who owns the repository (you must be signed in to GitHub with access to it). Everyone else lands on a GitHub page that will not let them run it, which does no harm. The link works out the repository from the page address (`https://NAME.github.io/REPO/`). If your page is on another address, add `"repo": "https://github.com/NAME/REPO"` at the top level of `sales.json` (next to `"sales"`).
 
@@ -111,13 +113,15 @@ Times are in UTC. US Eastern is 4 hours behind UTC until November 1, 2026 and 5 
 
 ## Things to know
 
-- **Final prices on SAN do not say if buyer's premium is included.** The page has a setting for this. Ask the auction firm, or compare one lot's last bid to its final price after it closes.
-- **Net proceeds are not shown.** They depend on the firm's commission and fees.
+- **Buyer's premium.** SAN does not say whether posted prices include it. The page checks for you once 10 prices are posted: hammer prices land on the firm's bid steps (whole dollars, multiples of $5 from $70 up), and a premium knocks most of them off. On the Maresch test sale all 421 prices over C$70 were on the steps, i.e. hammer prices. The result shows under "Price basis", and a banner appears if the setting disagrees with it. The setting is remembered on your device.
+- **Estimated proceeds.** Enter your seller's commission from your consignment contract under "Price basis and commission" and the summary adds an estimate of what you receive for the lots sold so far (and the CSV gets an `est_after_commission` column). Lotting, photo or insurance fees are not included; Dutch Country's settlement is final (their FAQ says consignors are paid 45 business days after the sale).
+- **Dutch Country's results file.** If they send the lotting summary back with the "Real" (realized) column filled in, you can drop it on the page like the original. The page reads those prices and flags any lot where they differ from SAN.
 - **Catalog values can use a different condition basis** than your lot (for example "CV listed is for no gum"). Those lots are tagged "basis noted". Treat percentages as a guide.
 - **Unsold lots:** SAN's "Unsold Lots" page really lists every lot that has *not sold yet*, including lots that have not closed. Before a sale it lists the whole catalog. So the page only counts a lot as unsold once the sale has moved past it (its number is below the highest lot that has sold). Two small side effects: a lot is not called unsold until the lot after it has sold, and the very last lots of a sale that pass unsold stay "open" until you check SAN.
 - **Be a good guest.** The job pauses a second between requests and only runs during sales. Consider emailing support@stampauctionnetwork.com to say you are doing this. If they ask you to stop, stop. This project is not affiliated with SAN.
 - **If SAN says no** (HTTP 403, or `HANDSHAKE_FAILED` every time), the fallback is manual: on the SAN sale page click **Realizations**, copy the page text, and paste it to Claude, who can read it.
 - GitHub pauses scheduled jobs in a repository with no activity for 60 days. Press **Run workflow** once to wake it.
+- **When you are done** (after the last sale you track), turn the job off: in GitHub open **Actions → Update sale data**, click the **…** menu at the top right, then **Disable workflow**. Otherwise it keeps waking every 15 minutes just to find nothing to do.
 
 ## Files
 

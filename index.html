@@ -168,7 +168,7 @@
   </div>
 
   <div id="settings" style="margin-top:18px">
-    <h2>2. Price basis</h2>
+    <h2>2. Price basis and commission</h2>
     <label class="note">Final prices on SAN are
       <select id="basis">
         <option value="posted">used as posted (treat as hammer price)</option>
@@ -177,6 +177,10 @@
     </label>
     <span id="premBox" class="hide"><input type="number" id="prem" value="20" min="0" max="60" step="0.5" style="width:80px"> %</span>
     <p class="note" style="margin:8px 0 0">SAN does not say whether the posted price includes the buyer's premium. Until you confirm it with the auction firm, results are shown as posted.</p>
+    <p class="note" id="premCheck" style="margin:6px 0 0"></p>
+    <label class="note" style="display:block;margin-top:14px">Your seller's commission (optional)
+      <input type="number" id="comm" min="0" max="60" step="0.5" placeholder="e.g. 15" style="width:80px;margin-left:6px"> %</label>
+    <p class="note" style="margin:6px 0 0">From your consignment contract. When filled in, the summary shows an estimate of what you receive for the lots sold so far. If your rate is on a sliding scale, use the rate that covers most of your lots. Lotting, photo or insurance fees are not included.</p>
   </div>
   <div class="tools" style="margin:14px 0 0"><button type="button" id="setupDone" class="primary hide">Done</button></div>
   </div>
@@ -263,7 +267,7 @@
 <div id="imgpop" role="tooltip" aria-live="polite"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="parser.js?v=4"></script>
+<script src="parser.js?v=5"></script>
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
@@ -316,6 +320,7 @@
 
   function loadSale() {
     state.data = null; state.mine = []; state.editing = false; state.sel = null; state.kidx = null;
+    loadSettings();
     var saved = store("get", "lots:" + state.key);
     if (saved) { try { state.mine = JSON.parse(saved); setMsg("Loaded " + state.mine.length + " lots saved on this device."); } catch (e) {} }
     else setMsg("");
@@ -371,8 +376,19 @@
   Array.prototype.forEach.call(document.querySelectorAll("#cmodeSeg button"), function (b) {
     b.addEventListener("click", function () { state.cmode = b.getAttribute("data-cmode"); store("set", "cmode", state.cmode); render(); });
   });
-  $("basis").addEventListener("change", function () { $("premBox").classList.toggle("hide", this.value !== "premium"); render(); });
-  $("prem").addEventListener("input", render);
+  /* price basis, premium and commission are remembered per sale on this device */
+  function saveSettings() { store("set", "basis:" + state.key, $("basis").value); store("set", "prem:" + state.key, $("prem").value); store("set", "comm:" + state.key, $("comm").value); }
+  function loadSettings() {
+    var b = store("get", "basis:" + state.key), pr = store("get", "prem:" + state.key), c = store("get", "comm:" + state.key);
+    $("basis").value = b === "premium" ? "premium" : "posted";
+    $("prem").value = pr != null && pr !== "" ? pr : "15";
+    $("comm").value = c != null ? c : "";
+    $("premBox").classList.toggle("hide", $("basis").value !== "premium");
+  }
+  function commRate() { var c = parseFloat($("comm").value); return isNaN(c) || c < 0 || c > 60 ? null : c; }
+  $("basis").addEventListener("change", function () { $("premBox").classList.toggle("hide", this.value !== "premium"); saveSettings(); render(); });
+  $("prem").addEventListener("input", function () { saveSettings(); render(); });
+  $("comm").addEventListener("input", function () { saveSettings(); render(); });
 
   /* ---------- model ---------- */
   function buildRows() {
@@ -390,7 +406,7 @@
         seen: (d && d.sold_seen && d.sold_seen[m.lot]) || "", bid: c.bid, moved: hist.length > 1, hist: hist,
         catMismatch: m.low != null && c.low != null && (c.low !== m.low || (c.high || null) !== (m.high || null)),
         inCatalog: !!c.desc };
-      row.sym = c.sym || "";
+      row.sym = c.sym || ""; row.real = m.real != null ? m.real : null;
       row.cls = StampParser.classify ? StampParser.classify({ sym: c.sym, text: (m.desc || "") + " " + (c.desc || "") }) : null;
       if (res && res.amount != null) {
         row.state = "sold"; row.final = res.amount / p; row.resCur = res.cur || ""; row.src = "results page";
@@ -432,13 +448,19 @@
     if (curBad) ban.push("<b>Currency differs</b> between catalog values and final prices for some lots. Percentages for those lots are not meaningful.");
     var cm = rows.filter(function (r) { return r.catMismatch; }).length;
     if (cm) ban.push(cm + " lot(s) have a value in your file that differs from the live catalog (marked ⚠). Your file's value is used.");
+    var pc = premiumCheck(d);
+    if (pc.verdict === "hammer" && $("basis").value === "premium") ban.push("<b>Check the price basis:</b> the posted prices look like hammer prices (no premium), but the page is set to take a premium off them. See section 2.");
+    if (pc.verdict === "premium" && $("basis").value !== "premium") ban.push("<b>Check the price basis:</b> the posted prices look like they include a buyer's premium, but the page uses them as posted. See section 2.");
+    var dis = rows.filter(function (r) { return r.state === "sold" && r.real != null && Math.abs(r.real - r.final) > 0.5; });
+    if (dis.length) ban.push("<b>Your file and SAN disagree</b> on the final price of " + dis.length + " lot(s): " + dis.slice(0, 6).map(function (r) { return "lot " + esc(r.lot) + " (file " + moneyX(r.real, r.cur) + ", SAN " + moneyX(r.final, r.resCur || r.cur) + ")"; }).join(", ") + (dis.length > 6 ? ", …" : "") + ". The firm's own figures are the ones you are paid on.");
     var nf = rows.filter(function (r) { return !r.inCatalog; }).length;
     if (d && nf && rows.length) ban.push(nf + " of your lots were not found in the catalog data (re-lotted, withdrawn, or data not yet collected).");
+    $("premCheck").textContent = pc.text;
     $("banners").innerHTML = ban.map(function (b) { return '<div class="banner">' + b + "</div>"; }).join("");
     $("dash").classList.toggle("hide", !rows.length);
     $("foot").innerHTML = "Source: public pages of <a href=\"" + esc(sale.sale_url || BASE) + "\">StampAuctionNetwork</a> (not affiliated). " +
       "Percent of value = price ÷ catalog value (CV), or ÷ the midpoint of an estimate range. Catalog values are the firm's and may use different condition bases than your lot, so treat ratios as a guide. " +
-      "Net proceeds also depend on commission and fees, which are not shown." +
+      "Estimated proceeds use the commission you enter in section 2; lotting, photo or insurance fees are not included, and the firm's settlement is final." +
       (state.repo ? ' <span class="refresh">Page owner: <a href="' + esc(state.repo) + '/actions/workflows/update.yml" target="_blank" rel="noopener">Refresh now</a> ' +
         "(opens the GitHub job page; press <i>Run workflow</i> there. It only works if you are signed in to GitHub with access to this repository.)</span>" : "");
     setupView(); ticker(d);
@@ -453,7 +475,8 @@
     $("setupBar").classList.toggle("hide", !collapsed);
     $("setupDone").classList.toggle("hide", !has);
     if (collapsed) {
-      var basis = $("basis").value === "premium" ? "prices include a " + (Number($("prem").value) || 0) + "% premium" : "prices as posted";
+      var basis = ($("basis").value === "premium" ? "prices include a " + (Number($("prem").value) || 0) + "% premium" : "prices as posted") +
+        (commRate() != null ? " · " + commRate() + "% commission" : "");
       $("setupSum").innerHTML = "<b>&#10003; " + state.mine.length + " lots loaded</b> <span class=\"note\">&middot; kept on this device only &middot; " + esc(basis) + "</span>";
     }
   }
@@ -467,6 +490,40 @@
     Object.keys((d && d.results) || {}).forEach(function (l) { if (d.results[l].amount != null) best = Math.max(best, lotNum(l)); });
     Object.keys((d && d.lots) || {}).forEach(function (l) { if (d.lots[l].sold != null) best = Math.max(best, lotNum(l)); });
     return best;
+  }
+  /* Do the posted prices look like hammer prices? A hammer price lands on the firm's bid steps (whole dollars,
+     multiples of $5 from about $70 up). Adding a 15% premium knocks most of them off: $525 becomes $603.75.
+     On the Maresch test sale 421 of 421 prices over C$70 were multiples of 5, which is what hammer prices look like. */
+  function premiumCheck(d) {
+    var amts = [], cur = "";
+    Object.keys((d && d.results) || {}).forEach(function (l) { var r = d.results[l]; if (r.amount != null) { amts.push(r.amount); cur = cur || r.cur || ""; } });
+    Object.keys((d && d.lots) || {}).forEach(function (l) { var c = d.lots[l]; if (c.sold != null && !(d.results && d.results[l] && d.results[l].amount != null)) { amts.push(c.sold); cur = cur || c.cur || ""; } });
+    var n = amts.length;
+    if (n < 10) return { verdict: "", text: n ? "Once 10 or more prices are posted (" + n + " so far), this page checks whether they look like hammer prices." : "" };
+    var cents = amts.filter(function (a) { return Math.abs(a - Math.round(a)) > 0.001; }).length;
+    var big = amts.filter(function (a) { return a >= 70; }), m5 = big.filter(function (a) { return Math.abs(a / 5 - Math.round(a / 5)) < 0.001; }).length;
+    var steps = big.length ? m5 + " of " + big.length + " prices of " + money(70, cur) + " or more sit on whole " + money(5, cur) + " bid steps" : "";
+    if (cents <= n * 0.02 && (big.length < 5 || m5 >= big.length * 0.9))
+      return { verdict: "hammer", text: "Checked " + n + " posted prices: " + (cents ? cents + " have cents" : "none have cents") + (steps ? " and " + steps : "") + ". That is what hammer prices look like (a 15% premium would knock most of them off the steps), so “used as posted” is the right choice." };
+    if (cents >= n * 0.25 || (big.length >= 5 && m5 <= big.length * 0.5))
+      return { verdict: "premium", text: "Checked " + n + " posted prices: " + cents + " have cents" + (steps ? " and only " + steps : "") + ". That looks like a buyer's premium is included; choose “include buyer's premium” and enter the firm's rate." };
+    return { verdict: "", text: "Checked " + n + " posted prices: the pattern is mixed (" + cents + " with cents" + (steps ? "; " + steps : "") + "), so it cannot tell whether a premium is included." };
+  }
+  /* Pace of the sale from when each lot was first seen sold (resolution: one check, about 15 minutes).
+     Only the current session counts: a gap of 3+ hours (overnight) starts a new one, and only the last hour or so
+     is used, so day 2 is not divided by the overnight break. */
+  function paceInfo(d, now) {
+    var seen = (d && d.sold_seen) || {}, byT = {};
+    Object.keys(seen).forEach(function (l) { var t = new Date(seen[l]).getTime(); if (!isNaN(t)) byT[t] = (byT[t] || 0) + 1; });
+    var T = Object.keys(byT).map(Number).sort(function (a, b) { return a - b; });
+    if (!T.length) return null;
+    var t1 = T[T.length - 1], s0 = 0, i;
+    for (i = 1; i < T.length; i++) if (T[i] - T[i - 1] > 3 * 3600000) s0 = i;
+    var ws = T[s0];
+    for (i = s0; i < T.length; i++) if (T[i] <= t1 - 60 * 60000) ws = T[i];
+    var cnt = 0; for (i = s0; i < T.length; i++) if (T[i] > ws) cnt += byT[T[i]];
+    var span = t1 - ws;
+    return { last: t1, paused: now - t1 > 45 * 60000, perHour: span >= 20 * 60000 && cnt >= 5 ? cnt / (span / 3600000) : null };
   }
   function unsoldSet(d) {
     var f = soldFrontier(d), u = {};
@@ -560,13 +617,15 @@
         " Your next lot is " + ahead.lot + (rank[ahead.lot] > last ? (away <= 1 ? ", next in line." : ", about " + away + " lots away.") : ".");
     }
     else note += " None of your remaining lots are waiting to close.";
-    /* rough pace: only lots first seen after the first check, so the opening snapshot does not distort it */
-    var ts = Object.keys(d.sold_seen || {}).map(function (l) { return new Date(d.sold_seen[l]).getTime(); }).filter(function (t) { return !isNaN(t); });
-    if (ts.length && nClosed < n) {
-      var t0 = Math.min.apply(null, ts), t1 = Math.max.apply(null, ts), later = ts.filter(function (t) { return t > t0; }).length;
-      if (later >= 5 && t1 - t0 >= 20 * 60000) {
-        var perHour = later / ((t1 - t0) / 3600000), hrs = (n - nClosed) / perHour;
-        note += " Rough pace so far: " + Math.round(perHour) + " lots an hour, so the rest could take about " + (hrs < 1 ? Math.round(hrs * 60) + " minutes" : hrs.toFixed(1) + " hours") + " (pace changes during a sale).";
+    var pi = paceInfo(d, Date.now());
+    if (pi && nClosed > 0 && nClosed < n) {
+      if (pi.paused) note += " No new results for " + ago(new Date(pi.last).toISOString()).replace(" ago", "") + ", so the sale is probably between sessions.";
+      else if (pi.perHour) {
+        note += " Lots are closing at about " + Math.round(pi.perHour) + " an hour.";
+        if (ahead && rank[ahead.lot] > last) {
+          var mins = (rank[ahead.lot] - last) / pi.perHour * 60;
+          note += " At that pace your next lot comes up in about " + (mins < 2 ? "a minute or two" : mins < 90 ? Math.round(mins) + " minutes" : (mins / 60).toFixed(1) + " hours of selling (sessions stop overnight)") + ".";
+        }
       }
     }
     $("progNote").textContent = note;
@@ -655,10 +714,12 @@
       [nref ? money(tv, cur) : "–", nref && nref < rows.length ? "catalog value (" + nref + " lots with a value)" : "total catalog value"],
       [sold.length + " / " + rows.length, "sold"],
       [sold.length ? money(sf, curF) : "–", "final prices (sold lots)"],
+      commRate() != null ? [sold.length ? money(sf * (1 - commRate() / 100), curF) : "–", "est. to you after " + commRate() + "% commission (before fees)"] : null,
       [soldRef.length && sv ? pct(sfr / sv) : "–", "of value, sold lots" + (soldRef.length && soldRef.length < sold.length ? " (" + soldRef.length + " with a value)" : "")],
       [unsold, "unsold"],
       [open.length ? moved + " / " + open.length : "–", "open lots with a moved bid"]
     ];
+    items = items.filter(Boolean);
     $("kpis").innerHTML = items.map(function (i) { return '<div class="kpi"><div class="v">' + i[0] + '</div><div class="l">' + i[1] + "</div></div>"; }).join("");
   }
 
@@ -1018,11 +1079,11 @@
     return '"' + v.replace(/"/g, '""') + '"';
   }
   $("csv").addEventListener("click", function () {
-    var head = ["lot", "description", "kind", "currency", "value_low", "value_high", "current_bid", "final_price", "pct_of_value", "result"];
+    var head = ["lot", "description", "kind", "currency", "value_low", "value_high", "current_bid", "final_price", "pct_of_value", "result", "est_after_commission"], cr = commRate();
     var vis = state.visible || [];
     var lines = [head.join(",")].concat(vis.map(function (r) {
       return [csvText(r.lot), csvText(r.desc), r.kind || "", r.cur || r.resCur || "", r.low == null ? "" : r.low, r.high || "", r.bid == null ? "" : r.bid,
-        r.state === "sold" ? r.final : "", r.ratio == null ? "" : r.ratio.toFixed(3), csvText(r.verdict)].join(",");
+        r.state === "sold" ? r.final : "", r.ratio == null ? "" : r.ratio.toFixed(3), csvText(r.verdict), r.state === "sold" && cr != null ? (r.final * (1 - cr / 100)).toFixed(2) : ""].join(",");
     }));
     var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }));
     a.download = "lots-" + state.key + (vis.length < (state.rowsAll || 0) ? "-filtered" : "") + ".csv"; a.click();
