@@ -45,7 +45,8 @@ CV_RE = re.compile(
 )
 BID_RE = re.compile(rf"Currently\.*\s*({CUR})?\s*({AMT})", re.I)
 SOLD_RE = re.compile(rf"SOLD\s+for\s*({CUR})?\s*({AMT})", re.I)
-RESULT_AMT_RE = re.compile(rf"^({CUR})?\s*({AMT})$", re.I)
+# Currency is required: a bare "6" next to a lot number is far more likely a neighbouring lot than a price.
+RESULT_AMT_RE = re.compile(rf"^({CUR})\s*({AMT})$", re.I)
 LOT_RE = re.compile(r"^\d+[A-Za-z]?$")
 STATUS_WORDS = re.compile(r"^(unsold|passed|pass|withdrawn|no sale|not sold)$", re.I)
 
@@ -359,28 +360,36 @@ def run_sale(cfg, force=False, debug=False):
     unsold_href = None
     results_from = parse_iso(cfg.get("results_from"))
     if force or not results_from or t >= results_from:
-        r = post_realizations(s, sale_url)
-        print(f"[{key}] realizations POST: HTTP {r.status_code}, {len(r.text)} bytes")
-        parsed = parse_results(r.text, sale)
-        print(f"[{key}] results title: {parsed['title']!r}")
-        if parsed["handshake_ok"]:
-            print(f"[{key}] HANDSHAKE_OK - SAN returned the right sale ({len(parsed['results'])} results)")
-            out["results"] = parsed["results"]
-            meta["results_fetched_at"] = iso(t)
-            unsold_href = parsed["unsold_href"]
-        else:
-            print(f"[{key}] HANDSHAKE_FAILED - results page did not name sale {sale}")
-            meta["warnings"].append("Realizations page did not return this sale (session handshake failed).")
-            (RAW / f"{key}-results-failed.html").write_text(r.text)
+        # A SAN hiccup here must not stop the catalog and unsold steps below, so it is caught, not raised.
+        try:
+            r = post_realizations(s, sale_url)
+            print(f"[{key}] realizations POST: HTTP {r.status_code}, {len(r.text)} bytes")
+            parsed = parse_results(r.text, sale)
+            print(f"[{key}] results title: {parsed['title']!r}")
+            if parsed["handshake_ok"]:
+                print(f"[{key}] HANDSHAKE_OK - SAN returned the right sale ({len(parsed['results'])} results)")
+                out["results"] = parsed["results"]
+                meta["results_fetched_at"] = iso(t)
+                unsold_href = parsed["unsold_href"]
+            else:
+                print(f"[{key}] HANDSHAKE_FAILED - results page did not name sale {sale}")
+                meta["warnings"].append("Realizations page did not return this sale (session handshake failed).")
+                (RAW / f"{key}-results-failed.html").write_text(r.text)
+                ok = False
+            if debug or not parsed["results"]:
+                (RAW / f"{key}-results.html").write_text(r.text)
+        except Exception as e:  # noqa: BLE001
+            print(f"[{key}] results step failed: {e}")
+            meta["warnings"].append(f"Results step failed ({e}); kept the previous results.")
             ok = False
-        if debug or not parsed["results"]:
-            (RAW / f"{key}-results.html").write_text(r.text)
 
     # 3. Catalog pages (bids). Only if due.
     live = results_from and t >= results_from
     every = cfg.get("catalog_refresh_minutes_live" if live else "catalog_refresh_minutes", 60)
     last = parse_iso(meta_prev.get("catalog_fetched_at"))
-    due = force or not last or (t - last).total_seconds() >= every * 60
+    # The cron fires every ~15 min with a few minutes of jitter, so allow 3 min of slack; otherwise a
+    # "15 minute" setting would quietly become 30.
+    due = force or not last or (t - last).total_seconds() >= every * 60 - 180
     if due:
         pages = catalog_page_links(front.text, firm, sale)
         print(f"[{key}] catalog pages found: {len(pages)}")
@@ -400,13 +409,10 @@ def run_sale(cfg, force=False, debug=False):
                 if not lots:
                     meta["warnings"].append(f"Catalog page {n}: no lots parsed")
                 for lot, rec in lots.items():
-                    old = out["lots"].get(lot, {})
                     out["lots"][lot] = rec
                     h = out["history"].setdefault(lot, [])
                     if "bid" in rec and (not h or h[-1][1] != rec["bid"]):
                         h.append([iso(t), rec["bid"]])
-                    elif "bid" not in rec and "bid" in old:
-                        pass
                 got += 1
             except Exception as e:  # noqa: BLE001
                 meta["warnings"].append(f"Catalog page {n}: {e}")

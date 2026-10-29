@@ -178,6 +178,42 @@ f.run_sale({"key": "T-1", "firm": "TS", "sale": "999"}, force=True)
 _o = _json.loads((_d / "T-1.json").read_text())
 check("end to end: Unsold page failure is reported and the old list is cleaned", _o["unsold"] == [] and any("Unsold page failed" in w for w in _o["meta"]["warnings"]))
 
+# results amounts need a currency (a bare number next to a lot number is probably another lot)
+_bare = f.parse_results("<h1>Prices Realized for X's Sale 9, d</h1><table><tr><td>5</td><td>6</td><td>C$ 100</td></tr></table>", "9")
+check("results: a bare number is not taken as a price", "5" not in _bare["results"])
+
+# a results POST that blows up must not stop the catalog, and must keep the old results
+_d2 = Path(_tmp.mkdtemp()); f.DATA, f.RAW = _d2, _d2 / "raw"
+(_d2 / "T-1.json").write_text(_json.dumps({"meta": {}, "lots": {}, "results": {"7": {"amount": 9, "cur": "US$"}}, "unsold": [], "history": {}}))
+_fg2, _, _ = _fake_net(None)
+def _post_boom(s, u):
+    raise RuntimeError("SAN hiccup")
+f.get, f.post_realizations, f.make_session = _fg2, _post_boom, (lambda: _NS(cookies={}))
+f.run_sale({"key": "T-1", "firm": "TS", "sale": "999"}, force=True)
+_o2 = _json.loads((_d2 / "T-1.json").read_text())
+check("results POST failure: catalog still updated", _o2["meta"].get("lot_count") == 3)
+check("results POST failure: old results kept and a warning recorded", _o2["results"].get("7", {}).get("amount") == 9 and any("Results step failed" in w for w in _o2["meta"]["warnings"]))
+
+# catalog timing: a 15-minute setting must fire on a 15-minute cron even with a little jitter
+import datetime as _dt
+_t = _dt.datetime(2026, 11, 10, 15, 0, tzinfo=_dt.timezone.utc)
+_d3 = Path(_tmp.mkdtemp()); f.DATA, f.RAW = _d3, _d3 / "raw"
+(_d3 / "T-1.json").write_text(_json.dumps({"meta": {"catalog_fetched_at": f.iso(_t - _dt.timedelta(minutes=14, seconds=10))}, "lots": {}, "results": {}, "unsold": [], "history": {}}))
+_fg3, _fp3, _ = _fake_net(None)
+f.get, f.post_realizations, f.make_session, f.now_utc = _fg3, _fp3, (lambda: _NS(cookies={})), (lambda: _t)
+f.run_sale({"key": "T-1", "firm": "TS", "sale": "999", "catalog_refresh_minutes": 15})
+check("catalog timing: 14m10s since last fetch counts as due for a 15 min setting", _json.loads((_d3 / "T-1.json").read_text())["meta"].get("lot_count") == 3)
+
+# parser.js: pasted lot lists (needs node; skipped quietly if absent)
+import shutil, subprocess
+if shutil.which("node"):
+    _js = ("const P=require(process.argv[1]);const o=t=>P.parseText(t).lots.map(l=>l.lot+':'+l.low).join(',');"
+           "console.log(JSON.stringify([o('241, 244\\n246, 247'),o('241 244\\n246 247'),o('241 565 CV\\n244 200-300 EST'),o('241: 565\\n244 = 300')]))")
+    _r = subprocess.run(["node", "-e", _js, str(Path(__file__).resolve().parent.parent / "parser.js")], capture_output=True, text=True)
+    _v = _json.loads(_r.stdout) if _r.returncode == 0 else None
+    check("parser.js: 'lot, lot' lines are lot numbers, not lot + value", _v and _v[0] == "241:null,244:null,246:null,247:null" and _v[1] == _v[0])
+    check("parser.js: labelled or ':' '=' values are still read", _v and _v[2] == "241:565,244:200" and _v[3] == "241:565,244:300")
+
 if check.failed:
     sys.exit(1)
 print("All parser self-tests passed.")
