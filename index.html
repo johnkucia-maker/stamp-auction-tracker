@@ -11,7 +11,7 @@
     --bg: #f6f5f2; --surface: #fcfcfb; --line: #e3e1dc; --grid: #ecebe7;
     --text: #0b0b0b; --text-2: #52514e; --muted: #6b6963;
     --series: #2a78d6; --chip: #eceae5; --warn-bg: #fff6e0; --warn-line: #e5c56a;
-    --focus: #2a78d6;
+    --focus: #2a78d6; --pin: #cf9f2f; --pin-ink: #86600f;
   }
   @media (prefers-color-scheme: dark) {
     :root:where(:not([data-theme="light"])) {
@@ -19,7 +19,7 @@
       --bg: #121211; --surface: #1a1a19; --line: #33322f; --grid: #2a2a28;
       --text: #f0efec; --text-2: #c3c2b7; --muted: #99978f;
       --series: #3987e5; --chip: #2a2a28; --warn-bg: #2b2410; --warn-line: #7a6320;
-      --focus: #3987e5;
+      --focus: #3987e5; --pin: #e0b94f; --pin-ink: #e0b94f;
     }
   }
   * { box-sizing: border-box; }
@@ -105,6 +105,7 @@
   #chart:focus-visible { outline: 2px solid var(--series); outline-offset: 3px; border-radius: 6px; }
   #chart .hit { cursor: pointer; }
   #chartPick { margin-top: 10px; min-height: 104px; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; font-size: 13px; }
+  #chartPick:not(.empty) { border-left: 3px solid var(--pin); }
   #chartPick.empty { color: var(--muted); border-style: dashed; display: flex; align-items: center; }
   #chartPick .pk { display: flex; flex-wrap: wrap; gap: 2px 16px; margin-top: 4px; color: var(--text-2); }
   #chartPick .pd { margin-top: 2px; color: var(--text-2); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -153,7 +154,7 @@
           Drop your lotting summary <b>PDF</b> here, or click to choose it.
           <input type="file" id="file" accept="application/pdf" class="hide">
         </div>
-        <p class="note">Your PDF is read <b>inside your browser</b> and is never uploaded. Only lot numbers and values are kept, and only on this device.</p>
+        <p class="note">Your PDF is read <b>inside your browser</b> and is never uploaded. Only your lot numbers, descriptions and values are kept, and only on this device.</p>
       </div>
       <div>
         <textarea id="paste" placeholder="Or paste lot numbers, e.g.&#10;241, 244, 246&#10;&#10;or lines with values, e.g.&#10;241 565 CV&#10;244 200-300 EST"></textarea>
@@ -249,7 +250,7 @@
         </select>
         <input type="text" id="search" placeholder="Search lot or text" aria-label="Search">
         <span class="sp"></span>
-        <button id="csv">Download CSV</button>
+        <button id="csv" title="Downloads the rows currently shown in the table (the filter and search apply)">Download CSV</button>
       </div>
       <p class="note" style="margin:0 0 8px">Hover over a lot number (or tap it once on a phone) to see its photo from SAN. Click it to open the lot on SAN.</p>
       <div class="scroll"><table id="tbl"></table></div>
@@ -273,6 +274,12 @@
   function store(op, k, v) { try { if (op === "get") return localStorage.getItem(k); if (op === "set") localStorage.setItem(k, v); if (op === "del") localStorage.removeItem(k); } catch (e) {} return null; }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
   function money(n, cur) { if (n == null || isNaN(n)) return "–"; return (cur || "") + Math.round(n).toLocaleString(); }
+  /* For one lot's own bid or price: whole dollars stay whole, but a $12.50 bid shows its cents. Totals use money(). */
+  function moneyX(n, cur) {
+    if (n == null || isNaN(n)) return "–";
+    var c = Math.round(n * 100) / 100;
+    return (cur || "") + (c === Math.round(c) ? c.toLocaleString() : c.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  }
   function pct(r) { return r == null ? "–" : Math.round(r * 100) + "%"; }
   function ago(iso) {
     if (!iso) return "never";
@@ -404,7 +411,7 @@
     if (r.state === "nodata") return "Not in catalog data";
     if (r.state === "open") return "Open, no result yet";
     if (r.ref == null) return "Sold (no value to compare)";
-    if (r.high)return r.final < r.low ? "▼ Under estimate" : (r.final > r.high ? "▲ Over estimate" : "● Within estimate");
+    if (r.high) { var rg = r.kind === "EST" ? "estimate" : "CV range"; return r.final < r.low ? "▼ Under " + rg : (r.final > r.high ? "▲ Over " + rg : "● Within " + rg); }
     if (r.ratio >= 1) return "▲ At or over CV";
     return r.ratio >= 0.5 ? "▼ Under CV" : "▼▼ Well under CV";
   }
@@ -421,7 +428,6 @@
     if (d && !meta.results_fetched_at) ban.push("Final prices have not been collected yet. Bars show current bids.");
     if (d && meta.results_fetched_at && !Object.keys(d.results || {}).length) ban.push("The results page is reachable but empty so far. That is normal before the sale starts.");
     var rows = state.mine.length ? buildRows() : [];
-    var mism = rows.filter(function (r) { return r.sold !== undefined; });
     var curBad = rows.some(function (r) { return r.state === "sold" && r.resCur && r.cur && curCode(r.resCur) && curCode(r.cur) && curCode(r.resCur) !== curCode(r.cur); });
     if (curBad) ban.push("<b>Currency differs</b> between catalog values and final prices for some lots. Percentages for those lots are not meaningful.");
     var cm = rows.filter(function (r) { return r.catMismatch; }).length;
@@ -437,7 +443,7 @@
         "(opens the GitHub job page; press <i>Run workflow</i> there. It only works if you are signed in to GitHub with access to this repository.)</span>" : "");
     setupView(); ticker(d);
     if (!rows.length) return;
-    kpis(rows, meta); progress(rows, d); highlights(rows); chart(rows, meta); runChart(rows); secChart(rows); stampCharts(rows); table(rows, meta);
+    kpis(rows); progress(rows, d); highlights(rows); chart(rows); runChart(rows); secChart(rows); stampCharts(rows); table(rows, meta);
   }
 
   /* ---------- setup panel: rolls up once lots are loaded ---------- */
@@ -674,9 +680,9 @@
 
   /* Pinned lot (solid band + ▼) and the keyboard cursor (dashed box), drawn behind the bars. */
   function chartMarks(g, r, i, cx, bw) {
-    var w = Math.max(bw, g.W * 0.012), h = g.H - g.T - g.B, x = cx - w / 2, s = "";
-    if (r.lot === state.sel) s += '<rect x="' + x + '" y="' + g.T + '" width="' + w + '" height="' + h + '" rx="3" fill="var(--series)" fill-opacity=".16" stroke="var(--series)" stroke-width="2"/>' +
-      '<text x="' + cx + '" y="' + (g.T - 2) + '" text-anchor="middle">▼</text>';
+    var w = Math.max(bw, g.W * 0.01), h = g.H - g.T - g.B, x = cx - w / 2, s = "";
+    if (r.lot === state.sel) s += '<rect x="' + x + '" y="' + g.T + '" width="' + w + '" height="' + h + '" rx="3" fill="var(--pin)" fill-opacity=".24" stroke="var(--pin)" stroke-width="1" vector-effect="non-scaling-stroke"/>' +
+      '<text x="' + cx + '" y="' + (g.T - 2) + '" text-anchor="middle" style="fill:var(--pin-ink)">▼</text>';
     if (i === state.kidx) s += '<rect x="' + x + '" y="' + g.T + '" width="' + w + '" height="' + h + '" rx="3" fill="none" stroke="var(--text)" stroke-width="1.5" stroke-dasharray="4 3"/>';
     return s;
   }
@@ -754,7 +760,7 @@
       return;
     }
     var sold = r.state === "sold", link = sanLink(r, (state.data || {}).meta), parts = [];
-    if (r.amt != null) parts.push("<span>" + (sold ? "Final price " : "Current bid ") + "<b>" + money(r.amt, r.cur) + "</b></span>");
+    if (r.amt != null) parts.push("<span>" + (sold ? "Final price " : "Current bid ") + "<b>" + moneyX(r.amt, r.cur) + "</b></span>");
     parts.push("<span>" + (r.ref != null ? "Catalog value <b>" + money(r.ref, r.cur) + "</b>" + (r.high ? " (midpoint of " + money(r.low, r.cur) + "–" + money(r.high) + ")" : "") : "No catalog value") + "</span>");
     if (r.ratio != null) parts.push("<span><b>" + pct(r.ratio) + "</b> of value</span>");
     if (link) parts.push('<a href="' + esc(link) + '" target="_blank" rel="noopener">View on SAN ↗</a>');
@@ -814,7 +820,7 @@
     $("chart").innerHTML = s;
     if (nclip) $("chartNote").textContent = "The vertical scale stops at " + money(top, cur) + " so a few large lots do not flatten the rest. ▲ marks the " + nclip + " lot" + (nclip === 1 ? "" : "s") + " that run off the top; hover or tap a bar for its real numbers.";
     wireTip(rows, function (r) {                              /* dollars first in this view */
-      if (r.amt != null) return "<b>" + (r.state === "sold" ? "Final " : "Bid ") + money(r.amt, r.cur) + "</b>" + (r.ref != null ? " against value " + money(r.ref, r.cur) + " (" + pct(r.ratio) + ")" : " (no catalog value)");
+      if (r.amt != null) return "<b>" + (r.state === "sold" ? "Final " : "Bid ") + moneyX(r.amt, r.cur) + "</b>" + (r.ref != null ? " against value " + money(r.ref, r.cur) + " (" + pct(r.ratio) + ")" : " (no catalog value)");
       return r.ref != null ? "Value <b>" + money(r.ref, r.cur) + "</b> · " + esc(r.verdict) : esc(r.verdict);
     });
   }
@@ -847,7 +853,7 @@
     $("chart").innerHTML = s;
     wireTip(rows, function (r) {                              /* percent first in this view */
       if (r.amt == null) return esc(r.verdict);
-      var what = (r.state === "sold" ? "Final " : "Bid ") + money(r.amt, r.cur);
+      var what = (r.state === "sold" ? "Final " : "Bid ") + moneyX(r.amt, r.cur);
       return r.ratio != null ? "<b>" + pct(r.ratio) + " of value</b> · " + what + " vs " + money(r.ref, r.cur) : what + " · no catalog value to compare";
     });
   }
@@ -949,7 +955,7 @@
   window.addEventListener("scroll", hideImg, true);
 
   var COLS = [
-    ["lot", "Lot", false, function (r) { return parseInt(r.lot, 10) + (r.lot.length > String(parseInt(r.lot, 10)).length ? 0.01 : 0); }],
+    ["lot", "Lot", false, function (r) { return lotNum(r.lot); }],
     ["desc", "Description", false, function (r) { return r.desc; }],
     ["ref", "Value", true, function (r) { return r.ref; }],
     ["bid", "Current bid", true, function (r) { return r.bid; }],
@@ -967,7 +973,7 @@
     });
   }
   function table(rows, meta) {
-    hideImg();
+    var keepImg = imgLot;                                   /* a refresh must not close a photo someone is looking at */
     var col = COLS.filter(function (c) { return c[0] === state.sort.k; })[0] || COLS[0];
     var list = filtered(rows).sort(function (a, b) {
       var x = col[3](a), y = col[3](b);
@@ -975,7 +981,7 @@
       return (x < y ? -1 : x > y ? 1 : 0) * state.sort.dir;
     });
     var h = "<thead><tr>" + COLS.map(function (c) {
-      return '<th class="' + (c[2] ? "num" : "") + '" data-k="' + c[0] + '"' + (state.sort.k === c[0] ? ' aria-sort="' + (state.sort.dir > 0 ? "ascending" : "descending") + '"' : "") + ">" + c[1] + "</th>";
+      return '<th class="' + (c[2] ? "num" : "") + '" tabindex="0" data-k="' + c[0] + '"' + (state.sort.k === c[0] ? ' aria-sort="' + (state.sort.dir > 0 ? "ascending" : "descending") + '"' : "") + ">" + c[1] + "</th>";
     }).join("") + "</tr></thead><tbody>";
     list.forEach(function (r) {
       var link = sanLink(r, meta);
@@ -983,25 +989,43 @@
       h += "<tr><td>" + (link ? '<a class="lotlink" data-lot="' + esc(r.lot) + '" href="' + esc(link) + '" target="_blank" rel="noopener">' + esc(r.lot) + "</a>" : esc(r.lot)) + "</td>" +
         '<td class="desc" title="' + esc(r.desc) + '">' + esc((r.desc || "").slice(0, 110)) + (r.basisNote ? ' <span class="tag" title="' + esc(r.basisNote) + '">ⓘ basis noted</span>' : "") + (r.catMismatch ? ' <span title="Your file and the live catalog disagree on the value">⚠</span>' : "") + "</td>" +
         '<td class="num">' + vtxt + "</td>" +
-        '<td class="num">' + (r.bid != null ? money(r.bid, r.cur) : "–") + (r.moved ? ' <span class="tag" title="Bid has changed since tracking began">↑moved</span>' : "") + "</td>" +
-        '<td class="num">' + (r.state === "sold" ? money(r.final, r.resCur || r.cur) + (r.srcNote ? ' <span title="' + esc(r.srcNote) + '">⚠</span>' : "") : "–") + "</td>" +
+        '<td class="num">' + (r.bid != null ? moneyX(r.bid, r.cur) : "–") + (r.moved ? ' <span class="tag" title="Bid has changed since tracking began">↑moved</span>' : "") + "</td>" +
+        '<td class="num">' + (r.state === "sold" ? moneyX(r.final, r.resCur || r.cur) + (r.srcNote ? ' <span title="' + esc(r.srcNote) + '">⚠</span>' : "") : "–") + "</td>" +
         '<td class="num">' + pct(r.ratio) + "</td>" +
         '<td><span class="chip">' + esc(r.verdict) + "</span></td></tr>";
     });
     $("tbl").innerHTML = h + "</tbody>";
+    var again = keepImg ? $("tbl").querySelector('a.lotlink[data-lot="' + keepImg.replace(/["\\]/g, "\\$&") + '"]') : null;
+    if (again) placePop(again); else hideImg();
     Array.prototype.forEach.call($("tbl").querySelectorAll("th"), function (th) {
-      th.onclick = function () { var k = th.getAttribute("data-k"); state.sort = { k: k, dir: state.sort.k === k ? -state.sort.dir : 1 }; render(); };
+      function sortBy(k, viaKeyboard) { state.sort = { k: k, dir: state.sort.k === k ? -state.sort.dir : 1 }; state.refocus = viaKeyboard ? k : null; render(); }
+      th.onclick = function () { sortBy(th.getAttribute("data-k"), false); };
+      th.onkeydown = function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sortBy(th.getAttribute("data-k"), true); } };
     });
-    state.visible = list;
+    if (state.refocus) {                                    /* the table is rebuilt on every sort; give the keyboard its place back */
+      var again2 = $("tbl").querySelector('th[data-k="' + state.refocus + '"]');
+      if (again2) again2.focus();
+      state.refocus = null;
+    }
+    state.visible = list; state.rowsAll = rows.length;
   }
   $("filter").addEventListener("change", render); $("search").addEventListener("input", render);
+  /* CSV: opens correctly in Excel (UTF-8 marker), says which currency, and neutralises text that a spreadsheet
+     could mistake for a formula. It exports the rows currently shown, so the filter and search apply. */
+  function csvText(v) {
+    v = String(v == null ? "" : v).replace(/\s+/g, " ").trim();
+    if (/^[=+\-@]/.test(v)) v = "'" + v;
+    return '"' + v.replace(/"/g, '""') + '"';
+  }
   $("csv").addEventListener("click", function () {
-    var head = ["lot", "description", "kind", "value_low", "value_high", "current_bid", "final_price", "pct_of_value", "result"];
-    var lines = [head.join(",")].concat((state.visible || []).map(function (r) {
-      return [r.lot, '"' + (r.desc || "").replace(/"/g, '""') + '"', r.kind, r.low, r.high || "", r.bid == null ? "" : r.bid, r.state === "sold" ? r.final : "", r.ratio == null ? "" : r.ratio.toFixed(3), '"' + r.verdict + '"'].join(",");
+    var head = ["lot", "description", "kind", "currency", "value_low", "value_high", "current_bid", "final_price", "pct_of_value", "result"];
+    var vis = state.visible || [];
+    var lines = [head.join(",")].concat(vis.map(function (r) {
+      return [csvText(r.lot), csvText(r.desc), r.kind || "", r.cur || r.resCur || "", r.low == null ? "" : r.low, r.high || "", r.bid == null ? "" : r.bid,
+        r.state === "sold" ? r.final : "", r.ratio == null ? "" : r.ratio.toFixed(3), csvText(r.verdict)].join(",");
     }));
-    var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
-    a.download = "lots-" + state.key + ".csv"; a.click();
+    var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }));
+    a.download = "lots-" + state.key + (vis.length < (state.rowsAll || 0) ? "-filtered" : "") + ".csv"; a.click();
   });
   setInterval(function () { pullData(false); }, 5 * 60 * 1000);
 })();
