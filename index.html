@@ -102,6 +102,15 @@
   @media (max-width: 860px) { .quad { grid-template-columns: 1fr; } }
   .quad h3 { font-size: 13px; margin: 0 0 4px; }
   svg text.tiny { font-size: 10px; fill: var(--muted); }
+  #chart:focus-visible { outline: 2px solid var(--series); outline-offset: 3px; border-radius: 6px; }
+  #chart .hit { cursor: pointer; }
+  #chartPick { margin-top: 10px; min-height: 104px; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; font-size: 13px; }
+  #chartPick.empty { color: var(--muted); border-style: dashed; display: flex; align-items: center; }
+  #chartPick .pk { display: flex; flex-wrap: wrap; gap: 2px 16px; margin-top: 4px; color: var(--text-2); }
+  #chartPick .pd { margin-top: 2px; color: var(--text-2); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  #chartPick .x { float: right; font-size: 12px; padding: 2px 9px; margin-left: 10px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  @media (max-width: 600px) { svg.lc text { font-size: 26px; } #chartPick { min-height: 140px; } }
   @media (max-width: 600px) { #prog svg text { font-size: 25px; } }
   a.lotlink { text-decoration: underline dotted; text-underline-offset: 3px; -webkit-tap-highlight-color: transparent; }
   #imgpop { position: fixed; z-index: 20; display: none; pointer-events: none; background: var(--surface); border: 1px solid var(--line);
@@ -198,7 +207,9 @@
         <span class="seg" role="group" aria-label="Chart view" id="cmodeSeg"><button type="button" data-cmode="pct" aria-pressed="true" class="on">% of value</button><button type="button" data-cmode="usd" aria-pressed="false">$ vs value</button></span>
       </div>
       <div class="legend" id="chartLegend"></div>
-      <div id="chart"></div>
+      <div id="chart" tabindex="0" role="group" aria-label="Lot chart. Left and right arrow keys move between lots, Enter pins a lot, Escape clears the pin."></div>
+      <div id="chartPick" class="empty" aria-live="polite"></div>
+      <div class="sr" id="chartSr" aria-live="polite"></div>
       <p class="note" id="chartNote" style="margin:6px 0 0"></p>
     </section>
 
@@ -297,7 +308,7 @@
   $("saleSel").addEventListener("change", function () { state.key = this.value; store("set", "sale", state.key); location.hash = state.key; loadSale(); });
 
   function loadSale() {
-    state.data = null; state.mine = []; state.editing = false;
+    state.data = null; state.mine = []; state.editing = false; state.sel = null; state.kidx = null;
     var saved = store("get", "lots:" + state.key);
     if (saved) { try { state.mine = JSON.parse(saved); setMsg("Loaded " + state.mine.length + " lots saved on this device."); } catch (e) {} }
     else setMsg("");
@@ -652,22 +663,110 @@
     var n = Math.max(1, Math.ceil(max / st - 1e-9));
     return { step: st, top: st * n, n: n };
   }
+  /* One geometry for both views, so switching between them never moves the bars or the axis. Phones get
+     bigger type, a wider label column and fewer lot labels (the drawing is scaled down to fit the screen). */
+  function geo() {
+    var ph = !!(window.matchMedia && matchMedia("(max-width: 600px)").matches);
+    return ph ? { W: 900, H: 520, L: 136, R: 10, T: 28, B: 62, ty: 26, tt: 4, dy: 9, per: 7 }
+              : { W: 900, H: 270, L: 76, R: 10, T: 12, B: 34, ty: 18, tt: 2, dy: 4, per: 12 };
+  }
+  function sanLink(r, meta) { return r.page && meta && meta.firm ? BASE + "/" + meta.firm + "/" + meta.firm.toLowerCase() + meta.sale + r.page + ".cfm#Lot" + encodeURIComponent(r.lot) : ""; }
+
+  /* Pinned lot (solid band + ▼) and the keyboard cursor (dashed box), drawn behind the bars. */
+  function chartMarks(g, r, i, cx, bw) {
+    var w = Math.max(bw, g.W * 0.012), h = g.H - g.T - g.B, x = cx - w / 2, s = "";
+    if (r.lot === state.sel) s += '<rect x="' + x + '" y="' + g.T + '" width="' + w + '" height="' + h + '" rx="3" fill="var(--series)" fill-opacity=".16" stroke="var(--series)" stroke-width="2"/>' +
+      '<text x="' + cx + '" y="' + (g.T - 2) + '" text-anchor="middle">▼</text>';
+    if (i === state.kidx) s += '<rect x="' + x + '" y="' + g.T + '" width="' + w + '" height="' + h + '" rx="3" fill="none" stroke="var(--text)" stroke-width="1.5" stroke-dasharray="4 3"/>';
+    return s;
+  }
+  function showTip(r, x, y) {
+    var tip = $("tip");
+    tip.innerHTML = "<b>Lot " + esc(r.lot) + "</b><br>" + esc((r.desc || "").slice(0, 70)) + "<br>" + state.tipFn(r);
+    tip.style.display = "block"; tip.style.left = Math.max(4, Math.min(x, innerWidth - 290)) + "px"; tip.style.top = y + "px";
+  }
+  function redrawChart() { if (state.chartRows) chart(state.chartRows); }
+  function pickLot(lot) { state.sel = state.sel === lot ? null : lot; redrawChart(); }
+
   function wireTip(rows, textFn) {
     var tip = $("tip"), el = $("chart");
-    function on(e) {
-      var t = e.target.closest ? e.target.closest(".hit") : null;
-      if (!t) { tip.style.display = "none"; return; }
-      var r = rows[+t.getAttribute("data-i")];
-      tip.innerHTML = "<b>Lot " + esc(r.lot) + "</b><br>" + esc((r.desc || "").slice(0, 70)) + "<br>" + textFn(r);
-      tip.style.display = "block"; tip.style.left = Math.max(4, Math.min(e.clientX + 12, innerWidth - 290)) + "px"; tip.style.top = e.clientY + 14 + "px";
-    }
-    el.onmousemove = on; el.onclick = on;                 /* click covers touch screens */
+    state.tipFn = textFn;
+    function hit(e) { var t = e.target.closest ? e.target.closest(".hit") : null; return t ? rows[+t.getAttribute("data-i")] : null; }
+    el.onmousemove = function (e) {                          /* hover previews any lot, pinned or not */
+      if (lastPtr === "touch") return;
+      var r = hit(e);
+      if (!r) { tip.style.display = "none"; return; }
+      showTip(r, e.clientX + 12, e.clientY + 14);
+    };
+    el.onclick = function (e) {                              /* click pins; click the same lot again to unpin */
+      var r = hit(e);
+      if (!r) { tip.style.display = "none"; if (state.sel != null) { state.sel = null; redrawChart(); } return; }
+      if (lastPtr === "touch") tip.style.display = "none";   /* on a touch screen the pinned panel is the readout */
+      pickLot(r.lot);
+    };
     el.onmouseleave = function () { tip.style.display = "none"; };
   }
   document.addEventListener("click", function (e) { if (!(e.target.closest && e.target.closest("#chart"))) $("tip").style.display = "none"; });
 
+  /* keyboard: the chart is one tab stop; arrows move between lots, Enter pins, Escape clears */
+  (function () {
+    var el = $("chart");
+    ["pointerover", "pointerdown"].forEach(function (t) { el.addEventListener(t, function (e) { lastPtr = e.pointerType || "mouse"; }); });
+    function selIdx(rows) { for (var i = 0; i < rows.length; i++) if (rows[i].lot === state.sel) return i; return 0; }
+    function cursorTip(i) {
+      var h = el.querySelector('.hit[data-i="' + i + '"]');
+      if (!h || !state.tipFn || !state.chartRows[i]) return;
+      var b = h.getBoundingClientRect();
+      showTip(state.chartRows[i], b.left + b.width / 2 + 12, b.top + 30);
+      $("chartSr").textContent = $("tip").textContent;
+    }
+    el.addEventListener("focus", function () {
+      var rows = state.chartRows, vis = true;
+      try { vis = el.matches(":focus-visible"); } catch (e) {}
+      if (!rows || !rows.length || !vis) return;           /* a mouse click focuses the box too; only show the cursor for keyboard use */
+      state.kidx = selIdx(rows); redrawChart(); cursorTip(state.kidx);
+    });
+    el.addEventListener("blur", function () { if (state.kidx != null) { state.kidx = null; redrawChart(); } $("tip").style.display = "none"; });
+    el.addEventListener("keydown", function (e) {
+      var rows = state.chartRows, k = e.key, i = state.kidx;
+      if (!rows || !rows.length) return;
+      if (k === "ArrowRight" || k === "ArrowLeft" || k === "Home" || k === "End") {
+        e.preventDefault();
+        i = k === "Home" ? 0 : k === "End" ? rows.length - 1 : i == null ? selIdx(rows) : Math.max(0, Math.min(rows.length - 1, i + (k === "ArrowRight" ? 1 : -1)));
+        state.kidx = i; redrawChart(); cursorTip(i);
+      } else if ((k === "Enter" || k === " ") && i != null) {
+        e.preventDefault(); pickLot(rows[i].lot); cursorTip(i);
+        $("chartSr").textContent = "Lot " + rows[i].lot + (state.sel === rows[i].lot ? " pinned" : " unpinned") + ". " + $("tip").textContent;
+      } else if (k === "Escape" && state.sel != null) {
+        e.preventDefault(); state.sel = null; redrawChart(); if (i != null) cursorTip(i);
+      }
+    });
+  })();
+  try { matchMedia("(max-width: 600px)").addEventListener("change", redrawChart); } catch (e) {}
+
+  /* the pinned-lot panel: a reserved slot under the chart, so pinning never shifts the page */
+  function renderPick(rows) {
+    var el = $("chartPick"), r = null, i;
+    if (state.sel != null) for (i = 0; i < rows.length; i++) if (rows[i].lot === state.sel) { r = rows[i]; break; }
+    if (!r) {
+      state.sel = null; el.className = "empty";
+      el.textContent = "Click a bar to pin that lot's details here. Hovering still previews other lots; click the pinned bar again to unpin. Keyboard: arrow keys, then Enter.";
+      return;
+    }
+    var sold = r.state === "sold", link = sanLink(r, (state.data || {}).meta), parts = [];
+    if (r.amt != null) parts.push("<span>" + (sold ? "Final price " : "Current bid ") + "<b>" + money(r.amt, r.cur) + "</b></span>");
+    parts.push("<span>" + (r.ref != null ? "Catalog value <b>" + money(r.ref, r.cur) + "</b>" + (r.high ? " (midpoint of " + money(r.low, r.cur) + "–" + money(r.high) + ")" : "") : "No catalog value") + "</span>");
+    if (r.ratio != null) parts.push("<span><b>" + pct(r.ratio) + "</b> of value</span>");
+    if (link) parts.push('<a href="' + esc(link) + '" target="_blank" rel="noopener">View on SAN ↗</a>');
+    el.className = "";
+    el.innerHTML = '<button type="button" class="x" id="pickClear" aria-label="Unpin lot ' + esc(r.lot) + '">Unpin</button><b>Lot ' + esc(r.lot) + '</b> <span class="chip">' + esc(r.verdict) + "</span>" +
+      '<div class="pd">' + esc((r.desc || "").slice(0, 140)) + '</div><div class="pk">' + parts.join("") + "</div>";
+    $("pickClear").onclick = function () { state.sel = null; redrawChart(); };
+  }
+
   function chart(rows) {
     var usd = state.cmode === "usd";
+    state.chartRows = rows; state.tipFn = null;
     $("chartTitle").textContent = usd ? "Price against catalog value, by lot" : "Price as % of value, by lot";
     Array.prototype.forEach.call(document.querySelectorAll("#cmodeSeg button"), function (b) {
       var on = b.getAttribute("data-cmode") === state.cmode; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on ? "true" : "false");
@@ -676,11 +775,12 @@
       (usd ? '<span><span class="sw ghost"></span>Catalog value (midpoint of an estimate range). A pale bar alone means no price yet.</span>'
            : "<span>Dashed line = 100% of catalog value (midpoint of an estimate range)</span>");
     $("chartNote").textContent = "";
-    return usd ? chartUsd(rows) : chartPct(rows);
+    if (usd) chartUsd(rows); else chartPct(rows);
+    renderPick(rows);
   }
 
   function chartUsd(rows) {
-    var W = 900, H = 270, L = 76, R = 10, T = 12, B = 34;
+    var g = geo(), W = g.W, H = g.H, L = g.L, R = g.R, T = g.T, B = g.B;
     var cur = (rows.filter(function (r) { return r.cur; })[0] || {}).cur || "";
     var vals = [];
     rows.forEach(function (r) { if (r.ref != null) vals.push(r.ref); if (r.amt != null) vals.push(r.amt); });
@@ -691,16 +791,17 @@
     var sc = niceScale(clip ? p90 * 1.3 : mx, 4), top = sc.top;
     var n = rows.length, bw = (W - L - R) / n, bar = Math.max(2, Math.min(14, bw - 2));
     var y = function (v) { return T + (H - T - B) * (1 - Math.min(v, top) / top); };
-    var s = '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" role="img" aria-label="Price and catalog value in dollars for each lot">';
-    for (var g = 0; g <= sc.n; g++) {
-      var gv = g * sc.step;
+    var s = '<svg class="lc" viewBox="0 0 ' + W + " " + H + '" width="100%" role="img" aria-label="Price and catalog value in dollars for each lot">';
+    for (var gi = 0; gi <= sc.n; gi++) {
+      var gv = gi * sc.step;
       s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(gv) + '" y2="' + y(gv) + '" stroke="var(--grid)"/>' +
-        '<text x="' + (L - 6) + '" y="' + (y(gv) + 4) + '" text-anchor="end">' + mshort(gv, cur) + "</text>";
+        '<text x="' + (L - 6) + '" y="' + (y(gv) + g.dy) + '" text-anchor="end">' + mshort(gv, cur) + "</text>";
     }
-    var every = Math.ceil(n / 12), nclip = 0;
+    var every = Math.ceil(n / g.per), nclip = 0;
     rows.forEach(function (r, i) {
       var cx = L + bw * i + bw / 2, x = cx - bar / 2;
-      if (i % every === 0) s += '<text x="' + cx + '" y="' + (H - 16) + '" text-anchor="middle">' + esc(r.lot) + "</text>";
+      s += chartMarks(g, r, i, cx, bw);
+      if (i % every === 0) s += '<text x="' + cx + '" y="' + (H - B + g.ty) + '" text-anchor="middle">' + esc(r.lot) + "</text>";
       if (r.ref != null) s += '<rect x="' + x + '" y="' + y(r.ref) + '" width="' + bar + '" height="' + Math.max(y(0) - y(r.ref), 1) + '" rx="2" fill="var(--series)" fill-opacity=".25"/>';
       if (r.amt != null) {
         var f = r.state === "sold" ? 'fill="var(--series)"' : 'fill="none" stroke="var(--series)" stroke-width="2"';
@@ -709,30 +810,31 @@
       if (Math.max(r.ref || 0, r.amt || 0) > top) { nclip++; s += '<text x="' + cx + '" y="' + (T - 1) + '" text-anchor="middle">▲</text>'; }
       s += '<rect class="hit" data-i="' + i + '" x="' + (cx - bw / 2) + '" y="' + T + '" width="' + bw + '" height="' + (H - T - B) + '" fill="transparent"/>';
     });
-    s += '<text x="' + (L + (W - L - R) / 2) + '" y="' + (H - 2) + '" text-anchor="middle">Lot number</text></svg>';
+    s += '<text x="' + (L + (W - L - R) / 2) + '" y="' + (H - g.tt) + '" text-anchor="middle">Lot number</text></svg>';
     $("chart").innerHTML = s;
     if (nclip) $("chartNote").textContent = "The vertical scale stops at " + money(top, cur) + " so a few large lots do not flatten the rest. ▲ marks the " + nclip + " lot" + (nclip === 1 ? "" : "s") + " that run off the top; hover or tap a bar for its real numbers.";
-    wireTip(rows, function (r) {
-      if (r.amt != null) return (r.state === "sold" ? "Final " : "Bid ") + money(r.amt, r.cur) + (r.ref != null ? " against value " + money(r.ref, r.cur) + " (" + pct(r.ratio) + ")" : " (no catalog value)");
-      return r.ref != null ? "Value " + money(r.ref, r.cur) + " · " + esc(r.verdict) : esc(r.verdict);
+    wireTip(rows, function (r) {                              /* dollars first in this view */
+      if (r.amt != null) return "<b>" + (r.state === "sold" ? "Final " : "Bid ") + money(r.amt, r.cur) + "</b>" + (r.ref != null ? " against value " + money(r.ref, r.cur) + " (" + pct(r.ratio) + ")" : " (no catalog value)");
+      return r.ref != null ? "Value <b>" + money(r.ref, r.cur) + "</b> · " + esc(r.verdict) : esc(r.verdict);
     });
   }
 
   function chartPct(rows) {
-    var W = 900, H = 270, L = 44, R = 10, T = 12, B = 34, cap = 3;
+    var g = geo(), W = g.W, H = g.H, L = g.L, R = g.R, T = g.T, B = g.B, cap = 3;
     var pts = rows.filter(function (r) { return r.ratio != null; });
     if (!pts.length) { $("chart").innerHTML = '<p class="note">No prices to plot yet.</p>'; return; }
     var n = rows.length, bw = (W - L - R) / n, bar = Math.max(2, Math.min(14, bw - 2));
     var y = function (v) { return T + (H - T - B) * (1 - Math.min(v, cap) / cap); };
-    var s = '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" role="img" aria-label="Price as percent of value for each lot">';
-    [0, 1, 2, 3].forEach(function (g) {
-      s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(g) + '" y2="' + y(g) + '" stroke="var(--grid)"' + (g === 1 ? ' stroke-dasharray="5 4" stroke-width="1.5" style="stroke:var(--muted)"' : "") + "/>";
-      s += '<text x="' + (L - 6) + '" y="' + (y(g) + 4) + '" text-anchor="end">' + g * 100 + "%</text>";
+    var s = '<svg class="lc" viewBox="0 0 ' + W + " " + H + '" width="100%" role="img" aria-label="Price as percent of value for each lot">';
+    [0, 1, 2, 3].forEach(function (gv) {
+      s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(gv) + '" y2="' + y(gv) + '" stroke="var(--grid)"' + (gv === 1 ? ' stroke-dasharray="5 4" stroke-width="1.5" style="stroke:var(--muted)"' : "") + "/>";
+      s += '<text x="' + (L - 6) + '" y="' + (y(gv) + g.dy) + '" text-anchor="end">' + gv * 100 + "%</text>";
     });
-    var every = Math.ceil(n / 12);
+    var every = Math.ceil(n / g.per);
     rows.forEach(function (r, i) {
       var cx = L + bw * i + bw / 2;
-      if (i % every === 0) s += '<text x="' + cx + '" y="' + (H - 16) + '" text-anchor="middle">' + esc(r.lot) + "</text>";
+      s += chartMarks(g, r, i, cx, bw);
+      if (i % every === 0) s += '<text x="' + cx + '" y="' + (H - B + g.ty) + '" text-anchor="middle">' + esc(r.lot) + "</text>";
       if (r.ratio != null) {
         var top = y(r.ratio), h = y(0) - top, x = cx - bar / 2;
         var f = r.state === "sold" ? 'fill="var(--series)"' : 'fill="none" stroke="var(--series)" stroke-width="2"';
@@ -741,10 +843,12 @@
       }
       s += '<rect class="hit" data-i="' + i + '" x="' + (cx - bw / 2) + '" y="' + T + '" width="' + bw + '" height="' + (H - T - B) + '" fill="transparent"/>';
     });
-    s += '<text x="' + (L + (W - L - R) / 2) + '" y="' + (H - 2) + '" text-anchor="middle">Lot number</text></svg>';
+    s += '<text x="' + (L + (W - L - R) / 2) + '" y="' + (H - g.tt) + '" text-anchor="middle">Lot number</text></svg>';
     $("chart").innerHTML = s;
-    wireTip(rows, function (r) {
-      return r.amt != null ? (r.state === "sold" ? "Final " : "Bid ") + money(r.amt, r.cur) + " = " + pct(r.ratio) + " of " + money(r.ref, r.cur) : esc(r.verdict);
+    wireTip(rows, function (r) {                              /* percent first in this view */
+      if (r.amt == null) return esc(r.verdict);
+      var what = (r.state === "sold" ? "Final " : "Bid ") + money(r.amt, r.cur);
+      return r.ratio != null ? "<b>" + pct(r.ratio) + " of value</b> · " + what + " vs " + money(r.ref, r.cur) : what + " · no catalog value to compare";
     });
   }
 
@@ -874,7 +978,7 @@
       return '<th class="' + (c[2] ? "num" : "") + '" data-k="' + c[0] + '"' + (state.sort.k === c[0] ? ' aria-sort="' + (state.sort.dir > 0 ? "ascending" : "descending") + '"' : "") + ">" + c[1] + "</th>";
     }).join("") + "</tr></thead><tbody>";
     list.forEach(function (r) {
-      var link = r.page && meta.firm ? BASE + "/" + meta.firm + "/" + meta.firm.toLowerCase() + meta.sale + r.page + ".cfm#Lot" + encodeURIComponent(r.lot) : "";
+      var link = sanLink(r, meta);
       var vtxt = r.ref == null ? (r.valNote ? '<span class="tag" title="Catalog value is in other terms; no percentage shown">' + esc(r.valNote) + "</span>" : "–") : (r.high ? money(r.low, r.cur) + "–" + money(r.high) + ' <span class="tag">' + (r.kind === "EST" ? "est" : "apx CV") + "</span>" : money(r.low, r.cur) + ' <span class="tag">CV</span>');
       h += "<tr><td>" + (link ? '<a class="lotlink" data-lot="' + esc(r.lot) + '" href="' + esc(link) + '" target="_blank" rel="noopener">' + esc(r.lot) + "</a>" : esc(r.lot)) + "</td>" +
         '<td class="desc" title="' + esc(r.desc) + '">' + esc((r.desc || "").slice(0, 110)) + (r.basisNote ? ' <span class="tag" title="' + esc(r.basisNote) + '">ⓘ basis noted</span>' : "") + (r.catMismatch ? ' <span title="Your file and the live catalog disagree on the value">⚠</span>' : "") + "</td>" +
