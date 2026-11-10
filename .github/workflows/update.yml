@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: write
+  actions: write      # lets a long run start the next one (see the last step)
 
 concurrency:
   group: update-data
@@ -21,7 +22,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
 
@@ -35,19 +36,44 @@ jobs:
       - name: Self-test the parsers
         run: python scripts/test_parsers.py
 
-      - name: Fetch SAN data
-        run: python scripts/fetch_sale.py ${{ github.event.inputs.force == 'true' && '--force' || '' }}
-
-      - name: Save data back to the repo
-        if: always()
+      # GitHub runs scheduled jobs late or not at all (on this repo, during Nov 2026, only every 6-9 hours).
+      # So while a sale is live this one run keeps going by itself: fetch, save, wait 10 minutes, repeat.
+      # Before GitHub's 6-hour limit it starts a fresh copy of itself, so coverage never lapses.
+      # Outside a live sale it does a single pass, exactly as before.
+      - name: Fetch SAN data and save it (repeats every ~10 minutes while a sale is live)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FIRST_FLAGS: ${{ github.event.inputs.force == 'true' && '--force' || '' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data
-          if git diff --cached --quiet; then
-            echo "No changes to save."
-          else
-            git commit -m "Update sale data"
-            git pull --rebase
-            git push
-          fi
+          stop=$((SECONDS + 330*60))
+          flags="$FIRST_FLAGS"
+          failed=0
+          while true; do
+            echo "::group::Fetch at $(date -u +%H:%M) UTC"
+            python scripts/fetch_sale.py $flags || { failed=1; echo "::warning::The fetch reported a problem (details above)."; }
+            echo "::endgroup::"
+            flags=""
+            git add data
+            if git diff --cached --quiet; then
+              echo "No changes to save."
+            else
+              git commit -q -m "Update sale data"
+              if ! { git pull -q --rebase && git push -q; }; then
+                git rebase --abort 2>/dev/null || true
+                echo "::warning::Could not save this round; it will be saved with the next one."
+              fi
+            fi
+            if ! python scripts/fetch_sale.py --live-check; then
+              echo "No sale is live, so this run stops here."
+              break
+            fi
+            if [ "$SECONDS" -ge "$stop" ]; then
+              echo "Close to GitHub's time limit: starting a fresh run to carry on."
+              gh workflow run update.yml --ref "$GITHUB_REF_NAME" -f force=false || echo "::warning::Could not start the next run."
+              break
+            fi
+            sleep 600
+          done
+          exit $failed
