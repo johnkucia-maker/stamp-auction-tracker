@@ -460,6 +460,13 @@ def stamp_sold_seen(out, t):
             seen.setdefault(lot, iso(t))
 
 
+def is_live(cfg, t):
+    """True while lots are closing: from results_from until sale_end (or track_until if there is no sale_end)."""
+    start = parse_iso(cfg.get("results_from"))
+    end = parse_iso(cfg.get("sale_end")) or parse_iso(cfg.get("track_until"))
+    return bool(start and t >= start and (not end or t < end))
+
+
 def write(path: Path, obj):
     DATA.mkdir(exist_ok=True)
     path.write_text(json.dumps(obj, separators=(",", ":"), sort_keys=True))
@@ -470,8 +477,14 @@ def main():
     ap.add_argument("--force", action="store_true", help="ignore tracking window and refresh timers")
     ap.add_argument("--debug", action="store_true", help="save raw HTML samples to data/raw/")
     ap.add_argument("--only", help="only this sale key")
+    ap.add_argument("--live-check", action="store_true",
+                    help="exit 0 if any sale is live now (results_from to sale_end, or track_until), else 1")
     a = ap.parse_args()
     sales = json.loads((ROOT / "sales.json").read_text())["sales"]
+    if a.live_check:
+        live = [c["key"] for c in sales if is_live(c, now_utc())]
+        print("Live now: " + (", ".join(live) if live else "none"))
+        sys.exit(0 if live else 1)
     all_ok = True
     for cfg in sales:
         if a.only and cfg["key"] != a.only:
