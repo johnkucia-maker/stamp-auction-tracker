@@ -68,7 +68,9 @@ The test sale **RM-592** (R. Maresch, ends Oct 29) is included on purpose. It ha
 
 ## Running the sale
 
-- The job runs every 15 minutes by itself (at :04, :19, :34 and :49, because GitHub delays jobs set for the top of the hour). Nothing for you to do.
+- The job is scheduled every 15 minutes, but GitHub treats schedules as best-effort and in November 2026 ran this one only every 6 to 9 hours. So **while a sale is live** (from `results_from` until `sale_end`) a single run keeps itself going: it fetches, saves, waits 10 minutes and repeats, and just before GitHub's 6-hour limit it starts a fresh copy of itself. One click on **Run workflow** (or one scheduled run) after the sale starts is enough to keep it going until the sale ends.
+- While that run is going, another **Run workflow** click just waits its turn, so there is no need to click again. Outside a live sale each run does a single pass, as before.
+- If the page shows "This data is … old" during a sale, the chain has stopped (or never started): click **Refresh now** at the bottom of the page and run it once.
 - The page trails the live sale by roughly 10 to 30 minutes (the job's schedule, GitHub's delays, and the page's own 5-minute check). For the lot that is up right now, watch SAN itself.
 - For Sale 367 tracking continues to November 22 so it also catches Dutch Country's Unsold Sale (November 18-20). After the main sale (`sale_end`) the catalog is re-read only hourly.
 - Outside a sale's dates (set in `sales.json`) the job skips that sale, so it makes no requests to SAN.

@@ -442,7 +442,15 @@
     if (!d) ban.push("<b>No data yet for this sale.</b> The scheduled job has not run. In GitHub open <i>Actions → Update sale data → Run workflow</i>.");
     (meta.warnings || []).slice(0, 4).forEach(function (w) { ban.push("<b>Data note:</b> " + esc(w)); });
     if (d && !meta.results_fetched_at) ban.push("Final prices have not been collected yet. Bars show current bids.");
-    if (d && meta.results_fetched_at && !Object.keys(d.results || {}).length) ban.push("The results page is reachable but empty so far. That is normal before the sale starts.");
+    /* During a live sale, say loudly when the data has not been refreshed: GitHub can skip scheduled runs for hours. */
+    var nowMs = Date.now(), rf = Date.parse(sale.results_from || ""), se = Date.parse(sale.sale_end || sale.track_until || "");
+    var liveNow = !isNaN(rf) && nowMs >= rf && (isNaN(se) || nowMs < se);
+    var lastRun = Date.parse(meta.fetched_at || "");
+    if (d && liveNow && (isNaN(lastRun) || nowMs - lastRun > 40 * 60000))
+      ban.push("<b>This data is " + (isNaN(lastRun) ? "out of date" : ago(meta.fetched_at).replace(" ago", " old")) + ".</b> The sale is live, but GitHub has not run the update job since then. Use <i>Refresh now</i> at the bottom of the page to start it (it then keeps itself running for the rest of the sale).");
+    if (d && meta.results_fetched_at && !Object.keys(d.results || {}).length)
+      ban.push(!isNaN(rf) && nowMs < rf ? "The results page is reachable but empty so far. That is normal before the sale starts."
+        : "The results page had no prices when it was last checked (" + ago(meta.results_fetched_at) + ").");
     var rows = state.mine.length ? buildRows() : [];
     var curBad = rows.some(function (r) { return r.state === "sold" && r.resCur && r.cur && curCode(r.resCur) && curCode(r.cur) && curCode(r.resCur) !== curCode(r.cur); });
     if (curBad) ban.push("<b>Currency differs</b> between catalog values and final prices for some lots. Percentages for those lots are not meaningful.");
